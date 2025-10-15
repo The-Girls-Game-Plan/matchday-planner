@@ -220,17 +220,18 @@
           const halfDuration = matchDuration / 2;
           const periodDuration = matchDuration / periods;
 
-          let outfieldPlayers = playersWithMinutes
-            .filter(p => p.role !== 'GK' && p.minutes > 0)
-            .sort((a, b) => a.minutes - b.minutes);
+          // Players available for rotation (active and outfield role)
+          let allOutfieldPlayers = playersWithMinutes
+            .filter(p => p.role !== 'GK' && p.name.trim() !== '' && p.minutes > 0)
+            .sort((a, b) => a.minutes - b.minutes); // Sorted by total minutes for fair rotation
 
           const gkPlayer = playersWithMinutes.find(p => p.role === 'GK');
           const allPlayers = playersWithMinutes;
 
-          if (outfieldPlayers.length <= outfieldSpots) {
+          if (allOutfieldPlayers.length <= outfieldSpots) {
             return {
-                planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min periods)\n\nAll participating players can play the full match duration based on the squad size and game format. No substitutions required for minutes management.`,
-                lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.startingPosition || 'Bench' })) }]
+                planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min periods)\n\nAll ${allOutfieldPlayers.length + 1} players can play the full match duration. No substitutions required for minutes management.`,
+                lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.startingPosition || (p.role === 'GK' ? 'GK' : 'Bench') })) }]
             };
           }
 
@@ -240,25 +241,53 @@
           
           let playing = [];
           let bench = [];
-          let rotationQueue = [...outfieldPlayers];
           let subCount = 0;
           let lineups = []; 
 
-          // 1. Assign starters and bench for the FIRST HALF
-          // Use the StartingPosition to define the initial playing and bench lists
-          const initialStarters = players.filter(p => p.startingPosition && p.startingPosition !== 'Bench' && p.role !== 'GK');
-          const initialBench = players.filter(p => p.startingPosition === 'Bench' || (p.startingPosition === '' && p.role !== 'GK'));
-          
-          if (initialStarters.length === outfieldSpots) {
-              playing = initialStarters;
-              bench = outfieldPlayers.filter(p => !playing.map(s => s.id).includes(p.id));
-          } else {
-              // Fallback: If not enough or too many defined starters, revert to the minute-priority default order.
-              playing = rotationQueue.splice(0, outfieldSpots);
-              bench = rotationQueue;
-          }
+        // --- CORE STARTER LOGIC FIX ---
+          // 1. Identify explicitly defined starters (players with a position other than 'Bench' or 'GK')
+          const definedStarters = playersWithMinutes.filter(p => 
+              p.startingPosition && 
+              p.startingPosition !== 'Bench' && 
+              p.startingPosition !== 'GK' && 
+              p.name.trim() !== ''
+          );
 
-          // Record starting lineup
+          // 2. Separate starters and substitutes based on the coach's input
+          if (definedStarters.length > 0 && definedStarters.length <= outfieldSpots) {
+              // Use the defined starters and fill any gaps with the highest-minute players, then bench the rest.
+              
+              // Map starters by position slot index
+              let startingMap = new Map();
+              definedStarters.forEach(p => {
+                  const index = positions.indexOf(p.startingPosition);
+                  if (index !== -1) startingMap.set(index, p);
+              });
+
+              // Fill the 'playing' array using the map, falling back to priority queue for empty slots
+              let autoFillQueue = allOutfieldPlayers.filter(p => !definedStarters.map(d => d.id).includes(p.id));
+              
+              playing = positions.map((pos, index) => {
+                  if (startingMap.has(index)) {
+                      return startingMap.get(index);
+                  }
+                  // Auto-fill empty starting positions from the rest of the players (minute priority)
+                  return autoFillQueue.shift();
+              }).filter(p => p); // Remove any nulls if there aren't enough players
+
+              // The bench is everyone else who is an active outfield player
+              const playingIDs = playing.map(p => p.id);
+              bench = allOutfieldPlayers.filter(p => !playingIDs.includes(p.id));
+
+          } else {
+              // Fallback to minute-based rotation for the starting lineup
+              playing = allOutfieldPlayers.splice(0, outfieldSpots);
+              bench = allOutfieldPlayers;
+          }
+        // --- END CORE STARTER LOGIC FIX ---
+
+
+          // Record initial starting lineup for visualizer (using the determined 'playing' list)
           lineups.push({ 
               time: '0:00 (Start)', 
               players: allPlayers.map(p => ({ 
@@ -267,7 +296,7 @@
               }))
           });
           
-          let currentPeriodMinutes = new Map(outfieldPlayers.map(p => [p.id, 0]));
+          let currentPeriodMinutes = new Map(allOutfieldPlayers.map(p => [p.id, 0]));
 
           plan += `--- STARTING LINEUP (0:00) ---\n`;
           playing.forEach((p, i) => {
@@ -420,7 +449,6 @@
                      updated.role = 'Outfield';
                 }
 
-
                 return updated;
             }));
           };
@@ -435,7 +463,7 @@
                 onChange={(e) => handleChange('name', e.target.value)}
                 className="flex-grow p-2 border rounded-lg focus:ring-sky-blue focus:border-sky-blue transition duration-150"
               />
-                {/* NEW: Starting Position (mirrors to Preferred Position) */}
+                {/* Starting Position (includes 'Bench') */}
                 <select
                     value={player.startingPosition || ''}
                     onChange={(e) => handleChange('startingPosition', e.target.value)}
@@ -480,6 +508,7 @@
         };
 
         const PlayerCircle = ({ name, position, isGK, color = COLORS.SKY_BLUE, yPos, xPos }) => {
+            // Displays position code inside the circle
             const displayPos = position.length > 4 ? position.replace('-', '/') : position;
             const firstName = name.split(' ')[0];
             
@@ -665,7 +694,7 @@
               id: generateUUID(),
               name: i === 0 ? 'Ella (GK)' : i === 1 ? 'Mia' : i < 11 ? `Player ${i + 1}` : '',
               role: i === 0 ? 'GK' : 'Outfield',
-              // Default player 1 to GK and others to Bench for manual selection safety
+              // Default player 1 to GK, all others to Bench for explicit selection
               startingPosition: i === 0 ? 'GK' : 'Bench', 
               preferredPosition: i === 0 ? 'GK' : '',
               secondaryPosition: '',
@@ -896,6 +925,7 @@
             <div className="p-4 md:p-8 min-h-screen" style={{ backgroundColor: COLORS.WHITE, fontFamily: 'Inter, sans-serif' }}>
               <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{ borderColor: COLORS.NAVY_BLUE }}>
                 <div className="flex items-center space-x-4">
+                  {/* LOGO PLACEMENT: Use your public link here */}
                   <img
                     src="https://placehold.co/100x100/193755/AF9542?text=TGGPLOGO" 
                     alt="The Girls' Game Plan Logo" 
