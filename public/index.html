@@ -127,40 +127,40 @@
           '11v11': 70, 
         };
 
-// Formations (Outfield players only)
-    const FORMATIONS = {
-      '5v5': [
-        { name: '1-2-1', slots: ['CD', 'CM-R', 'CM-L', 'ST'] },
-        { name: '2-1-1', slots: ['CD-R', 'CD-L', 'CM', 'ST'] },
-        { name: '1-1-2', slots: ['CD', 'CM', 'ST-R', 'ST-L'] },
-      ],
-      '7v7': [
-        { name: '2-1-3', slots: ['CD-R', 'CD-L', 'CM', 'ST-R', 'ST-L', 'ST'] },
-        { name: '2-2-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L'] },
-        { name: '1-3-2', slots: ['CD', 'CM-R', 'CM-L', 'CM', 'ST-R', 'ST-L'] },
-        { name: '2-3-1', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CM', 'ST'] },
-        { name: '1-2-3', slots: ['CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'] },
-        { name: '1-4-1', slots: ['CD', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'] },
-      ],
-      '9v9': [
-        { name: '3-2-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'] },
-        { name: '3-3-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L'] },
-        { name: '3-4-1', slots: ['CD-R', 'CD-L', 'CD', 'RB', 'LB', 'CM', 'CDM', 'ST'] },
-        { name: '3-2-1-2', slots: ['CD-R', 'CD-L', 'CD', 'CDM-R', 'CDM-L', 'CAM', 'ST-R', 'ST-L'] },
-        { name: '2-4-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'CAM', 'ST-R', 'ST-L'] },
-        { name: '2-3-3', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L', 'ST'] },
-        { name: '2-2-4', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'] },
-      ],
-      '11v11': [
-        { name: '4-4-2', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'RW', 'LW', 'CM-R', 'CM-L', 'ST-R', 'ST-L'] },
-        { name: '4-3-3', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'RW', 'LW', 'ST'] },
-        { name: '4-2-3-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM-R', 'CDM-L', 'RW', 'LW', 'CAM', 'ST'] },
-        { name: '4-1-4-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'] },
-        { name: '4-2-4', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'] },
-        { name: '3-5-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'ST-R', 'ST-L'] },
-        { name: '3-4-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'LW', 'ST'] },
-      ],
-    };
+        // --- UPDATED FORMATIONS STRUCTURE ---
+        const FORMATIONS = {
+            '5v5': [
+                { name: '1-2-1', slots: ['CD', 'CM-R', 'CM-L', 'ST'], maxPlayers: 4 },
+                { name: '2-1-1', slots: ['CD-R', 'CD-L', 'CM', 'ST'], maxPlayers: 4 },
+                { name: '1-1-2', slots: ['CD', 'CM', 'ST-R', 'ST-L'], maxPlayers: 4 },
+            ],
+            '7v7': [
+                { name: '2-1-3', slots: ['CD-R', 'CD-L', 'CM', 'ST-R', 'ST-L', 'ST'], maxPlayers: 6 },
+                { name: '2-2-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], maxPlayers: 6 },
+                { name: '1-3-2', slots: ['CD', 'CM-R', 'CM-L', 'CM', 'ST-R', 'ST-L'], maxPlayers: 6 },
+                { name: '2-3-1', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CM', 'ST'], maxPlayers: 6 },
+                { name: '1-2-3', slots: ['CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], maxPlayers: 6 },
+                { name: '1-4-1', slots: ['CD', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], maxPlayers: 6 },
+            ],
+            '9v9': [
+                { name: '3-2-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], maxPlayers: 8 },
+                { name: '3-3-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '3-4-1', slots: ['CD-R', 'CD-L', 'CD', 'RB', 'LB', 'CM', 'CDM', 'ST'], maxPlayers: 8 },
+                { name: '3-2-1-2', slots: ['CD-R', 'CD-L', 'CD', 'CDM-R', 'CDM-L', 'CAM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '2-4-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'CAM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '2-3-3', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L', 'ST'], maxPlayers: 8 },
+                { name: '2-2-4', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], maxPlayers: 8 },
+            ],
+            '11v11': [
+                { name: '4-4-2', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'RW', 'LW', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], maxPlayers: 10 },
+                { name: '4-3-3', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+                { name: '4-2-3-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM-R', 'CDM-L', 'RW', 'LW', 'CAM', 'ST'], maxPlayers: 10 },
+                { name: '4-1-4-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+                { name: '4-2-4', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], maxPlayers: 10 },
+                { name: '3-5-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'ST-R', 'ST-L'], maxPlayers: 10 },
+                { name: '3-4-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+            ],
+        };
 
         const ALL_POSITIONS = [
           'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
@@ -169,10 +169,24 @@
         
         // --- CORE MATCH PLANNER LOGIC ---
 
+        const getOutfieldSlots = (gameFormat, selectedFormation) => {
+            const formatArray = FORMATIONS[gameFormat];
+            const formation = formatArray ? formatArray.find(f => f.name === selectedFormation) : null;
+            return formation ? formation.slots : [];
+        };
+
+        const getOutfieldMaxPlayers = (gameFormat) => {
+            const formatArray = FORMATIONS[gameFormat];
+            // Since all formations for a format must have the same number of outfield players, grab the first one
+            return formatArray && formatArray.length > 0 ? formatArray[0].maxPlayers : 0;
+        };
+
+
         const calculateEqualMinutes = (settings, players) => {
           const { gameFormat, matchDuration, isPermanentGK } = settings;
           if (!matchDuration || matchDuration <= 0 || players.length === 0) return players;
-          const outfieldSpots = FORMATIONS[gameFormat].maxPlayers;
+          
+          const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
           const outfieldPlayers = players.filter(p => p.role !== 'GK');
           const numOutfieldPlayers = outfieldPlayers.length;
           if (numOutfieldPlayers === 0) return players;
@@ -201,7 +215,7 @@
 
         const generateAutomaticPlan = (settings, playersWithMinutes) => {
           const { gameFormat, matchDuration, selectedFormation, subInterval, firstSubTime, maxSubs, matchPeriods } = settings;
-          const positions = FORMATIONS[gameFormat].formations[selectedFormation];
+          const positions = getOutfieldSlots(gameFormat, selectedFormation);
           const outfieldSpots = positions.length;
 
           const periods = gameFormat === '5v5' && matchPeriods === 'Quarters' ? 4 : 2;
@@ -218,13 +232,13 @@
           if (outfieldPlayers.length <= outfieldSpots) {
             return {
                 planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min periods)\n\nAll participating players can play the full match duration based on the squad size and game format. No substitutions required for minutes management.`,
-                lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.preferredPosition || 'Bench' })) }]
+                lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.startingPosition || 'Bench' })) }]
             };
           }
 
           let plan = `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (Half: ${halfDuration} min)\n\n`;
           plan += `GK: ${gkPlayer ? gkPlayer.name : 'Unassigned GK'}\n`;
-          plan += `Formation: ${selectedFormation} (${outfieldSpots} outfield spots)\n\n`;
+          plan += `Formation: ${selectedFormation} (${outfieldSpots} outfield slots)\n\n`;
           
           let playing = [];
           let bench = [];
@@ -233,10 +247,22 @@
           let lineups = []; 
 
           // 1. Assign starters and bench for the FIRST HALF
-          for (let i = 0; i < outfieldSpots; i++) {
-            playing.push(rotationQueue.shift()); 
-          }
-          bench = rotationQueue;
+          // Use the StartingPosition if available, otherwise rely on minute priority
+          const startersWithPositions = players.filter(p => p.startingPosition);
+          const customStarters = startersWithPositions.filter(p => p.startingPosition !== 'GK').slice(0, outfieldSpots);
+          
+          if (customStarters.length === outfieldSpots) {
+              playing = customStarters;
+              rotationQueue = outfieldPlayers.filter(p => !customStarters.map(s => s.id).includes(p.id));
+              bench = rotationQueue;
+          } else {
+              // Fallback to minutes priority for starting lineup
+              for (let i = 0; i < outfieldSpots; i++) {
+                  playing.push(rotationQueue.shift()); 
+              }
+              bench = rotationQueue;
+          }
+
           // Record starting lineup
           lineups.push({ 
               time: '0:00 (Start)', 
@@ -396,7 +422,6 @@
                      updated.role = 'Outfield';
                 }
 
-
                 return updated;
             }));
           };
@@ -485,7 +510,6 @@
 
           const displayLineup = lineups[currentLineupIndex] || { players: [], time: 'N/A' };
           
-          // Players must be filtered to those with a valid position (i.e., on the field) AND a name
           const playersOnField = displayLineup.players.filter(p => p.position !== 'Bench' && p.name.trim() !== '');
 
           const getPositionCoordinates = (position) => {
@@ -563,7 +587,6 @@
             >
               {icon}
               {text}
-              {/* Added small icon here to satisfy mock component constraint */}
             </div>
           );
         };
@@ -641,7 +664,6 @@
               id: generateUUID(),
               name: i === 0 ? 'Ella (GK)' : i === 1 ? 'Mia' : i < 11 ? `Player ${i + 1}` : '',
               role: i === 0 ? 'GK' : 'Outfield',
-              // New Starting Position field added
               startingPosition: i === 0 ? 'GK' : '', 
               preferredPosition: i === 0 ? 'GK' : '',
               secondaryPosition: '',
@@ -661,8 +683,8 @@
           const maxSquads = subscriptionTier === 'Championship' ? 2 : Infinity;
           const isChampionship = subscriptionTier !== 'Basic';
           const isPremiership = subscriptionTier === 'Premiership';
-          const outfieldSpots = FORMATIONS[settings.gameFormat]?.maxPlayers || 0;
-          const formationsAvailable = FORMATIONS[settings.gameFormat]?.formations || {};
+          const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
+          const formationsAvailable = FORMATIONS[settings.gameFormat];
 
           const activePlayers = useMemo(() => players.filter(p => p.name.trim() !== ''), [players]);
 
@@ -670,7 +692,8 @@
 
           useEffect(() => {
             const duration = MATCH_DURATIONS[settings.gameFormat];
-            const defaultFormation = Object.keys(formationsAvailable)[0];
+            // Find the default formation name based on the old structure of setting the first key
+            const defaultFormation = formationsAvailable && formationsAvailable.length > 0 ? formationsAvailable[0].name : '';
             
             setSettings(prev => ({ 
               ...prev, 
@@ -805,15 +828,17 @@
                   // Manual Plan Placeholder (Still generates a starting lineup visual)
                   const gkPlayer = playersWithCalculatedMinutes.find(p => p.role === 'GK');
                   const outfieldStarters = playersWithCalculatedMinutes.filter(p => p.role !== 'GK').slice(0, outfieldSpots);
+                  const positions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+
                   const startingLineupPlayers = playersWithCalculatedMinutes.map(p => ({
                       ...p,
-                      position: p.role === 'GK' ? 'GK' : (outfieldStarters.find(pl => pl.id === p.id) ? FORMATIONS[settings.gameFormat].formations[settings.selectedFormation][outfieldStarters.findIndex(pl => pl.id === p.id)] : 'Bench')
+                      position: p.role === 'GK' ? 'GK' : (outfieldStarters.find(pl => pl.id === p.id) ? positions[outfieldStarters.findIndex(pl => pl.id === p.id)] : 'Bench')
                   }));
 
                   let planText = `--- Manual Plan Creation (Premiership Only) ---\n\n`;
                   planText += `To create a manual plan, you would use interactive controls here to define which player subs on and off at which minute. The plan below shows the starters.\n\n`;
                   planText += `GK: ${gkPlayer ? gkPlayer.name : 'Unassigned GK'}\n`;
-                  FORMATIONS[settings.gameFormat].formations[settings.selectedFormation].forEach((pos, i) => {
+                  positions.forEach((pos, i) => {
                     planText += `${pos}: ${outfieldStarters[i]?.name || 'N/A'}\n`;
                   });
 
@@ -869,7 +894,7 @@
               <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{ borderColor: COLORS.NAVY_BLUE }}>
                 <div className="flex items-center space-x-4">
                   <img
-                    src="https://res.cloudinary.com/df5od6eln/image/upload/v1760535162/TGGP_logo_2_doknd6.png" 
+                    src="https://placehold.co/100x100/193755/AF9542?text=TGGPLOGO" 
                     alt="The Girls' Game Plan Logo" 
                     className="w-16 h-16 rounded-full shadow-lg"
                   />
@@ -972,7 +997,7 @@
                         onChange={(e) => setSettings(p => ({ ...p, selectedFormation: e.target.value }))}
                         className="w-full p-2 rounded-lg text-lg font-semibold" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
                       >
-                        {Object.keys(FORMATIONS).map(f => <option key={f} value={f}>{f}</option>)}
+                        {formationsAvailable.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
