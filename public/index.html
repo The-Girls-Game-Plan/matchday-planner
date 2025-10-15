@@ -8,10 +8,30 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #F0F4F8; }
+        .loading-fallback { 
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #193755;
+            text-align: center;
+        }
+        /* Hide the fallback once React mounts and takes over the root */
+        #root:not(:empty) + .loading-fallback { display: none; }
     </style>
 </head>
 <body>
+    <!-- This is where the React App will mount -->
     <div id="root"></div>
+
+    <!-- Fallback Content: Visible only if React fails to load -->
+    <div class="loading-fallback">
+        <!-- Using a placeholder image for the logo -->
+        <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZgAATU0AKgAAAAgABgESAAMAAAABAAEAAAEaAAUAAAABAAA... (This is the long Base64 string for your logo) ..." alt="The Girls' Game Plan Logo" class="w-36 h-36 mb-4 rounded-full shadow-lg">
+        <h1 class="text-3xl font-extrabold">The Girls' Game Planner</h1>
+        <p class="text-lg font-medium mt-2" style="color: #56B0D5;">Initializing Matchday System...</p>
+    </div>
 
     <!-- Load React and ReactDOM Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
