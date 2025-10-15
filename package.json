@@ -1,0 +1,21 @@
+{
+  "name": "the-girls-game-planner",
+  "version": "1.0.0",
+  "description": "Matchday planner tool for grassroots coaches built with React and Firebase.",
+  "main": "index.js",
+  "scripts": {
+    "build": "npx babel --presets @babel/preset-react TheGirlsGamePlanner.jsx > public/app-bundle.js",
+    "postbuild": "echo // Ensure Firebase dependencies are available in Canvas environment >> public/app-bundle.js",
+    "deploy": "npm run build && firebase deploy --only hosting"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.24.8",
+    "@babel/core": "^7.24.8",
+    "@babel/preset-react": "^7.24.7",
+    "babel-preset-minify": "^0.5.2"
+  }
+}
