@@ -127,7 +127,6 @@
           '11v11': 70, 
         };
 
-        // --- UPDATED FORMATIONS STRUCTURE ---
         const FORMATIONS = {
             '5v5': [
                 { name: '1-2-1', slots: ['CD', 'CM-R', 'CM-L', 'ST'], maxPlayers: 4 },
@@ -167,7 +166,7 @@
           'CDM', 'CAM', 'RW', 'LW', 'ST', 'ST-R', 'ST-L'
         ];
         
-        // --- CORE MATCH PLANNER LOGIC ---
+        // --- CORE MATCH PLANNER UTILITIES ---
 
         const getOutfieldSlots = (gameFormat, selectedFormation) => {
             const formatArray = FORMATIONS[gameFormat];
@@ -177,7 +176,6 @@
 
         const getOutfieldMaxPlayers = (gameFormat) => {
             const formatArray = FORMATIONS[gameFormat];
-            // Since all formations for a format must have the same number of outfield players, grab the first one
             return formatArray && formatArray.length > 0 ? formatArray[0].maxPlayers : 0;
         };
 
@@ -247,20 +245,17 @@
           let lineups = []; 
 
           // 1. Assign starters and bench for the FIRST HALF
-          // Use the StartingPosition if available, otherwise rely on minute priority
-          const startersWithPositions = players.filter(p => p.startingPosition);
-          const customStarters = startersWithPositions.filter(p => p.startingPosition !== 'GK').slice(0, outfieldSpots);
+          // Use the StartingPosition to define the initial playing and bench lists
+          const initialStarters = players.filter(p => p.startingPosition && p.startingPosition !== 'Bench' && p.role !== 'GK');
+          const initialBench = players.filter(p => p.startingPosition === 'Bench' || (p.startingPosition === '' && p.role !== 'GK'));
           
-          if (customStarters.length === outfieldSpots) {
-              playing = customStarters;
-              rotationQueue = outfieldPlayers.filter(p => !customStarters.map(s => s.id).includes(p.id));
-              bench = rotationQueue;
+          if (initialStarters.length === outfieldSpots) {
+              playing = initialStarters;
+              bench = outfieldPlayers.filter(p => !playing.map(s => s.id).includes(p.id));
           } else {
-              // Fallback to minutes priority for starting lineup
-              for (let i = 0; i < outfieldSpots; i++) {
-                  playing.push(rotationQueue.shift()); 
-              }
-              bench = rotationQueue;
+              // Fallback: If not enough or too many defined starters, revert to the minute-priority default order.
+              playing = rotationQueue.splice(0, outfieldSpots);
+              bench = rotationQueue;
           }
 
           // Record starting lineup
@@ -400,7 +395,10 @@
         const PlayerInputRow = ({ player, index, settings, setPlayers, subscriptionTier, allPositions }) => {
           const isChampionship = subscriptionTier !== 'Basic';
           const isPremiership = subscriptionTier === 'Premiership';
-          const availablePositions = ALL_POSITIONS.filter(p => p !== 'GK' || index === 0);
+          // Filter available positions: GK only for player 1, all others for everyone else + 'Bench'
+          const availablePositions = (index === 0) 
+            ? ['GK', ...ALL_POSITIONS.filter(p => p !== 'GK')] // GK must be an option for player 1
+            : ['Bench', ...ALL_POSITIONS.filter(p => p !== 'GK')]; // 'Bench' option for all outfield players
 
           const handleChange = (field, value) => {
             setPlayers(prev => prev.map(p => {
@@ -409,18 +407,19 @@
                 let updated = { ...p, [field]: value };
 
                 // Logic for Starting Position -> Preferred Position auto-mirror
-                if (field === 'startingPosition' && value !== '') {
+                if (field === 'startingPosition' && value !== '' && value !== 'Bench') {
                     updated.preferredPosition = value;
                 }
                 
-                // Logic for GK role management
+                // Logic for GK role management (Based on Preferred Position)
                 if (updated.preferredPosition === 'GK') {
                     updated.role = 'GK';
-                } else if (p.role === 'GK' && index !== 0) {
-                     updated.role = 'Outfield';
-                } else if (p.role === 'GK' && index === 0 && updated.preferredPosition !== 'GK') {
+                } else if (p.role === 'GK' && updated.preferredPosition !== 'GK') {
+                    updated.role = 'Outfield';
+                } else if (p.role !== 'Outfield' && updated.preferredPosition !== 'GK') {
                      updated.role = 'Outfield';
                 }
+
 
                 return updated;
             }));
@@ -453,7 +452,7 @@
                 className="p-2 border rounded-lg w-28 text-sm bg-white"
               >
                 <option value="">Pref. Pos.</option>
-                {availablePositions.map(pos => <option key={`pref-${pos}`} value={pos}>{pos}</option>)}
+                {availablePositions.filter(p => p !== 'Bench').map(pos => <option key={`pref-${pos}`} value={pos}>{pos}</option>)}
               </select>
 
               {isChampionship && (
@@ -463,7 +462,7 @@
                   className={`p-2 border rounded-lg w-28 text-sm bg-white`}
                 >
                   <option value="">Sec. Pos.</option>
-                  {availablePositions.map(pos => <option key={`sec-${pos}`} value={pos}>{pos}</option>)}
+                  {availablePositions.filter(p => p !== 'Bench').map(pos => <option key={`sec-${pos}`} value={pos}>{pos}</option>)}
                 </select>
               )}
 
@@ -481,7 +480,6 @@
         };
 
         const PlayerCircle = ({ name, position, isGK, color = COLORS.SKY_BLUE, yPos, xPos }) => {
-            // Displays position code inside the circle
             const displayPos = position.length > 4 ? position.replace('-', '/') : position;
             const firstName = name.split(' ')[0];
             
@@ -645,12 +643,15 @@
 
           const [settings, setSettings] = useState(() => {
             const defaultFormat = '9v9';
+             const formations = FORMATIONS[defaultFormat];
+             const defaultFormationName = formations && formations.length > 0 ? formations[0].name : '';
+
             return {
               gameFormat: defaultFormat,
               matchDuration: MATCH_DURATIONS[defaultFormat],
               squadSize: 11,
               isPermanentGK: true,
-              selectedFormation: '3-3-2',
+              selectedFormation: defaultFormationName,
               planType: 'Automatic', 
               subInterval: 10,
               firstSubTime: 10,
@@ -664,7 +665,8 @@
               id: generateUUID(),
               name: i === 0 ? 'Ella (GK)' : i === 1 ? 'Mia' : i < 11 ? `Player ${i + 1}` : '',
               role: i === 0 ? 'GK' : 'Outfield',
-              startingPosition: i === 0 ? 'GK' : '', 
+              // Default player 1 to GK and others to Bench for manual selection safety
+              startingPosition: i === 0 ? 'GK' : 'Bench', 
               preferredPosition: i === 0 ? 'GK' : '',
               secondaryPosition: '',
               manualMinutes: null,
@@ -692,13 +694,14 @@
 
           useEffect(() => {
             const duration = MATCH_DURATIONS[settings.gameFormat];
-            // Find the default formation name based on the old structure of setting the first key
-            const defaultFormation = formationsAvailable && formationsAvailable.length > 0 ? formationsAvailable[0].name : '';
+            // Ensure formation list and default selection are handled correctly
+            const formations = FORMATIONS[settings.gameFormat];
+            const defaultFormationName = formations && formations.length > 0 ? formations[0].name : '';
             
             setSettings(prev => ({ 
               ...prev, 
               matchDuration: duration,
-              selectedFormation: defaultFormation,
+              selectedFormation: defaultFormationName,
               matchPeriods: settings.gameFormat === '5v5' ? prev.matchPeriods : 'Halves', 
             }));
           }, [settings.gameFormat]);
@@ -773,7 +776,7 @@
               if (i < loadedPlayers.length) {
                 return loadedPlayers[i];
               }
-              return { id: generateUUID(), name: '', role: 'Outfield', startingPosition: '', preferredPosition: '', secondaryPosition: '', manualMinutes: null };
+              return { id: generateUUID(), name: '', role: 'Outfield', startingPosition: 'Bench', preferredPosition: '', secondaryPosition: '', manualMinutes: null };
             });
             setPlayers(newPlayers);
             setMatchPlan('');
@@ -874,7 +877,7 @@
             }, 500);
           };
 
-          // --- Render ---
+        // --- Render ---
 
           if (error) {
             return <div className="text-red-600 p-4 bg-red-100 rounded-lg m-4">Initialization Error: {error}</div>;
@@ -997,7 +1000,7 @@
                         onChange={(e) => setSettings(p => ({ ...p, selectedFormation: e.target.value }))}
                         className="w-full p-2 rounded-lg text-lg font-semibold" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
                       >
-                        {formationsAvailable.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
+                        {formationsAvailable.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1155,7 +1158,7 @@
                     {settings.selectedFormation && (
                       <PositionVisualizer 
                             settings={settings} 
-                            lineups={matchLineups.length > 0 ? matchLineups : [{ players: displayedPlayers.map(p => ({...p, position: p.preferredPosition || 'Bench'})), time: 'Current Roster'}]} 
+                            lineups={matchLineups.length > 0 ? matchLineups : [{ players: displayedPlayers.map(p => ({...p, position: p.startingPosition || 'Bench'})), time: 'Current Roster'}]} 
                             currentLineupIndex={currentLineupIndex}
                             isPremiership={isPremiership}
                         />
