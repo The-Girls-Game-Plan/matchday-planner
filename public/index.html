@@ -220,10 +220,10 @@
           const halfDuration = matchDuration / 2;
           const periodDuration = matchDuration / periods;
 
-          // Players available for rotation (active and outfield role)
+          // Players available for rotation (active and outfield role), sorted by minutes
           let allOutfieldPlayers = playersWithMinutes
             .filter(p => p.role !== 'GK' && p.name.trim() !== '' && p.minutes > 0)
-            .sort((a, b) => a.minutes - b.minutes); // Sorted by total minutes for fair rotation
+            .sort((a, b) => a.minutes - b.minutes);
 
           const gkPlayer = playersWithMinutes.find(p => p.role === 'GK');
           const allPlayers = playersWithMinutes;
@@ -254,35 +254,28 @@
           );
 
           // 2. Separate starters and substitutes based on the coach's input
-          if (definedStarters.length > 0 && definedStarters.length <= outfieldSpots) {
-              // Use the defined starters and fill any gaps with the highest-minute players, then bench the rest.
+          if (definedStarters.length === outfieldSpots) {
               
-              // Map starters by position slot index
-              let startingMap = new Map();
+              // Use the defined starters exactly as they form the playing list
+              let starterMap = new Map();
               definedStarters.forEach(p => {
                   const index = positions.indexOf(p.startingPosition);
-                  if (index !== -1) startingMap.set(index, p);
+                  if (index !== -1) starterMap.set(index, p);
               });
-
-              // Fill the 'playing' array using the map, falling back to priority queue for empty slots
-              let autoFillQueue = allOutfieldPlayers.filter(p => !definedStarters.map(d => d.id).includes(p.id));
               
-              playing = positions.map((pos, index) => {
-                  if (startingMap.has(index)) {
-                      return startingMap.get(index);
-                  }
-                  // Auto-fill empty starting positions from the rest of the players (minute priority)
-                  return autoFillQueue.shift();
-              }).filter(p => p); // Remove any nulls if there aren't enough players
-
-              // The bench is everyone else who is an active outfield player
+              // Sort starters into the playing array based on the position index order
+              playing = positions.map((_, index) => starterMap.get(index)).filter(p => p); 
+              
+              // Bench is everyone else who is an active outfield player
               const playingIDs = playing.map(p => p.id);
               bench = allOutfieldPlayers.filter(p => !playingIDs.includes(p.id));
 
           } else {
-              // Fallback to minute-based rotation for the starting lineup
-              playing = allOutfieldPlayers.splice(0, outfieldSpots);
-              bench = allOutfieldPlayers;
+              // Fallback: Use minute-based rotation for the starting lineup
+              // Note: We need a fresh copy of the array for splicing
+              let rotationQueue = [...allOutfieldPlayers];
+              playing = rotationQueue.splice(0, outfieldSpots);
+              bench = rotationQueue;
           }
         // --- END CORE STARTER LOGIC FIX ---
 
@@ -296,7 +289,9 @@
               }))
           });
           
-          let currentPeriodMinutes = new Map(allOutfieldPlayers.map(p => [p.id, 0]));
+          // *CRITICAL FIX*: Re-initialize currentPeriodMinutes using the full set of players that ARE in rotation
+          let playersInRotation = [...playing, ...bench];
+          let currentPeriodMinutes = new Map(playersInRotation.map(p => [p.id, 0]));
 
           plan += `--- STARTING LINEUP (0:00) ---\n`;
           playing.forEach((p, i) => {
@@ -351,7 +346,8 @@
               const outgoingCandidates = [];
 
               playing.forEach((player, index) => {
-                  currentPeriodMinutes.set(player.id, currentPeriodMinutes.get(player.id) + elapsed);
+                  // Ensure player exists in the map before incrementing
+                  currentPeriodMinutes.set(player.id, (currentPeriodMinutes.get(player.id) || 0) + elapsed); 
                   outgoingCandidates.push({ 
                       player, 
                       position: positions[index], 
@@ -925,9 +921,9 @@
             <div className="p-4 md:p-8 min-h-screen" style={{ backgroundColor: COLORS.WHITE, fontFamily: 'Inter, sans-serif' }}>
               <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{ borderColor: COLORS.NAVY_BLUE }}>
                 <div className="flex items-center space-x-4">
-                  {/* LOGO PLACEMENT: Use your public link here */}
+                  {/* LOGO FIX: Replace the placeholder below with your direct Cloudinary URL */}
                   <img
-                    src="https://placehold.co/100x100/193755/AF9542?text=TGGPLOGO" 
+                    src="https://res.cloudinary.com/df5od6eln/image/upload/v1760535162/TGGP_logo_2_doknd6.png" 
                     alt="The Girls' Game Plan Logo" 
                     className="w-16 h-16 rounded-full shadow-lg"
                   />
