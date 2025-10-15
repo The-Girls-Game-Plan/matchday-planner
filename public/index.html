@@ -1,28 +1,23 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>The Girls' Game Planner</title>
-        <!-- Load Tailwind CSS -->
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-            body { font-family: 'Inter', sans-serif; background-color: #F0F4F8; }
-        </style>
-    </head>
-    <body>
-        <div id="root"></div>
-        <!-- 
-            NOTE: In a real deployment, you would compile TheGirlsGamePlanner.jsx 
-            into a JavaScript bundle and load it here. For this environment, 
-            you only need the React component in the Canvas, 
-            but the Hosting setup requires this structure.
-        -->
-        <script>
-            // Placeholder for compiled React bundle in a real environment
-            document.getElementById('root').innerHTML = "<h1>Application loading...</h1><p>The Girls' Game Planner React App will appear here upon build and deployment.</p>";
-        </script>
-    </body>
-    </html>
-    
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Girls' Game Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #F0F4F8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Load React and ReactDOM Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+    <!-- Load the Compiled Application Code -->
+    <script src="./app-bundle.js"></script> 
+</body>
+</html>
