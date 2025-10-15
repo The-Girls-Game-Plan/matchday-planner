@@ -127,12 +127,40 @@
           '11v11': 70, 
         };
 
-        const FORMATIONS = {
-          '5v5': { maxPlayers: 4, formations: { '1-2-1': ['CD', 'CM-R', 'CM-L', 'ST'], '2-1-1': ['CD-R', 'CD-L', 'CM', 'ST'], '1-1-2': ['CD', 'CM', 'ST-R', 'ST-L'], } },
-          '7v7': { maxPlayers: 6, formations: { '2-1-3': ['CD-R', 'CD-L', 'CM', 'ST-R', 'ST-L', 'ST'], '2-2-2': ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], '1-3-2': ['CD', 'CM-R', 'CM-L', 'CM', 'ST-R', 'ST-L'], '2-3-1': ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CM', 'ST'], '1-2-3': ['CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], '1-4-1': ['CD', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], } },
-          '9v9': { maxPlayers: 8, formations: { '3-2-3': ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], '3-3-2': ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L'], '3-4-1': ['CD-R', 'CD-L', 'CD', 'RB', 'LB', 'CM', 'CDM', 'ST'], '3-2-1-2': ['CD-R', 'CD-L', 'CD', 'CDM-R', 'CDM-L', 'CAM', 'ST-R', 'ST-L'], '2-4-2': ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'CAM', 'ST-R', 'ST-L'], '2-3-3': ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L', 'ST'], '2-2-4': ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], } },
-          '11v11': { maxPlayers: 10, formations: { '4-4-2': ['RB', 'LB', 'CD-R', 'CD-L', 'RW', 'LW', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], '4-3-3': ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'RW', 'LW', 'ST'], '4-2-3-1': ['RB', 'LB', 'CD-R', 'CD-L', 'CDM-R', 'CDM-L', 'RW', 'LW', 'CAM', 'ST'], '4-1-4-1': ['RB', 'LB', 'CD-R', 'CD-L', 'CDM', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], '4-2-4': ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], '3-5-2': ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'ST-R', 'ST-L'], '3-4-3': ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'LW', 'ST'], } },
-        };
+// Formations (Outfield players only)
+    const FORMATIONS = {
+      '5v5': [
+        { name: '1-2-1', slots: ['CD', 'CM-R', 'CM-L', 'ST'] },
+        { name: '2-1-1', slots: ['CD-R', 'CD-L', 'CM', 'ST'] },
+        { name: '1-1-2', slots: ['CD', 'CM', 'ST-R', 'ST-L'] },
+      ],
+      '7v7': [
+        { name: '2-1-3', slots: ['CD-R', 'CD-L', 'CM', 'ST-R', 'ST-L', 'ST'] },
+        { name: '2-2-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L'] },
+        { name: '1-3-2', slots: ['CD', 'CM-R', 'CM-L', 'CM', 'ST-R', 'ST-L'] },
+        { name: '2-3-1', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CM', 'ST'] },
+        { name: '1-2-3', slots: ['CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'] },
+        { name: '1-4-1', slots: ['CD', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'] },
+      ],
+      '9v9': [
+        { name: '3-2-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'] },
+        { name: '3-3-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L'] },
+        { name: '3-4-1', slots: ['CD-R', 'CD-L', 'CD', 'RB', 'LB', 'CM', 'CDM', 'ST'] },
+        { name: '3-2-1-2', slots: ['CD-R', 'CD-L', 'CD', 'CDM-R', 'CDM-L', 'CAM', 'ST-R', 'ST-L'] },
+        { name: '2-4-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'CAM', 'ST-R', 'ST-L'] },
+        { name: '2-3-3', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L', 'ST'] },
+        { name: '2-2-4', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'] },
+      ],
+      '11v11': [
+        { name: '4-4-2', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'RW', 'LW', 'CM-R', 'CM-L', 'ST-R', 'ST-L'] },
+        { name: '4-3-3', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'RW', 'LW', 'ST'] },
+        { name: '4-2-3-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM-R', 'CDM-L', 'RW', 'LW', 'CAM', 'ST'] },
+        { name: '4-1-4-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'] },
+        { name: '4-2-4', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'] },
+        { name: '3-5-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'ST-R', 'ST-L'] },
+        { name: '3-4-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'LW', 'ST'] },
+      ],
+    };
 
         const ALL_POSITIONS = [
           'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
