@@ -4,7 +4,7 @@
   "description": "Matchday planner tool for grassroots coaches built with React and Firebase.",
   "main": "index.js",
   "scripts": {
-    "build": "npx babel --presets @babel/preset-react TheGirlsGamePlanner.jsx > public/app-bundle.js",
+    "build": "./node_modules/.bin/babel --presets @babel/preset-react TheGirlsGamePlanner.jsx > public/app-bundle.js",
     "postbuild": "echo // Ensure Firebase dependencies are available in Canvas environment >> public/app-bundle.js",
     "deploy": "npm run build && firebase deploy --only hosting"
   },
