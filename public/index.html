@@ -3,10 +3,9 @@
 <head>
     <title>The Girls' Game Planner</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> 
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
@@ -195,13 +194,19 @@
           
           const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
           
-          // 1. Determine players whose minutes need to be calculated (active outfield players)
-          const outfieldPlayers = players.filter(p => p.role !== 'GK' && p.name.trim() !== '');
-          const numOutfieldPlayers = outfieldPlayers.length;
+          // 1. Determine players whose minutes need to be calculated (active outfield players, excluding full-game manual players)
+          const outfieldPlayersInRotation = players.filter(p => 
+                p.role !== 'GK' && 
+                p.name.trim() !== '' &&
+                // Item 10 & New Exempt Rule: Exclude players with minutes matching full duration AND active in rotation
+                p.minutes !== matchDuration 
+            );
+
+          const numOutfieldPlayers = outfieldPlayersInRotation.length;
           
           if (numOutfieldPlayers === 0) return players;
 
-          // 2. Calculate Total Available Outfield Minutes (Item 10 fix)
+          // 2. Calculate Total Available Outfield Minutes
           const totalOutfieldMinutesAvailable = outfieldSpots * matchDuration;
           
           // 3. Calculate equal time (rounded down) and remaining minutes
@@ -209,24 +214,29 @@
           let remainderMinutes = totalOutfieldMinutesAvailable % numOutfieldPlayers;
 
           const updatedPlayers = players.map((player) => {
-            // GK who plays full match
-            if (player.role === 'GK' && isPermanentGK) {
+            // Player is fully exempt/fixed minutes (GK or manual override)
+            if (player.role === 'GK' && isPermanentGK) {
               return { ...player, minutes: matchDuration };
             }
-            // GK who rotates or Bench players (minutes calculated later in plan logic, or 0 here if rotating GK is not handled by this function)
-            if (player.role === 'GK' || player.name.trim() === '') {
-                return { ...player, minutes: player.manualMinutes !== null ? player.manualMinutes : (player.role === 'GK' && !isPermanentGK ? baseEqualTime : 0) };
+            if (player.manualMinutes === matchDuration) {
+                return { ...player, minutes: matchDuration };
+            }
+            if (player.name.trim() === '') {
+                 return { ...player, minutes: 0 };
             }
 
-            // Outfield player minute distribution
-            let finalMinutes = baseEqualTime;
-            if (remainderMinutes > 0) {
-              finalMinutes += 1;
-              remainderMinutes--;
-            }
+            // Outfield player subject to rotation calculation
+            if (player.role !== 'GK' && player.manualMinutes === null) {
+                let finalMinutes = baseEqualTime;
+                if (remainderMinutes > 0) {
+                    finalMinutes += 1;
+                    remainderMinutes--;
+                }
+                return { ...player, minutes: finalMinutes };
+            }
 
-            const effectiveMinutes = player.manualMinutes !== null ? player.manualMinutes : finalMinutes;
-            return { ...player, minutes: effectiveMinutes };
+            // Handles rotating GK or manual minutes set lower than full duration
+            return { ...player, minutes: player.manualMinutes !== null ? player.manualMinutes : (player.role === 'GK' && !isPermanentGK ? baseEqualTime : player.minutes) };
           });
 
           return updatedPlayers;
@@ -241,17 +251,18 @@
           const halfDuration = matchDuration / 2;
           const periodDuration = matchDuration / periods;
 
-          // Players available for rotation (active and outfield role), sorted by minutes
-          let allOutfieldPlayers = playersWithMinutes
-            .filter(p => p.role !== 'GK' && p.name.trim() !== '' && p.minutes > 0)
-            .sort((a, b) => a.minutes - b.minutes);
+          // Players in rotation (Outfield, active, NOT full game exemption)
+          let allOutfieldPlayersInRotation = playersWithMinutes
+            .filter(p => p.role !== 'GK' && p.name.trim() !== '' && p.minutes > 0 && p.minutes < matchDuration)
+            .sort((a, b) => a.minutes - b.minutes); // Sorted by total minutes for fair rotation
 
           const gkPlayer = playersWithMinutes.find(p => p.role === 'GK');
           const allPlayers = playersWithMinutes;
 
-          if (allOutfieldPlayers.length <= outfieldSpots) {
+          if (allOutfieldPlayersInRotation.length <= outfieldSpots) {
+            // Simplified return if no real subs needed
             return {
-                planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min periods)\n\nAll ${allOutfieldPlayers.length + 1} players can play the full match duration. No substitutions required for minutes management.`,
+                planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min periods)\n\nAll ${allOutfieldPlayersInRotation.length + 1} players can play the full match duration or their manually set minutes. No substitutions required for minutes management.`,
                 lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.startingPosition || (p.role === 'GK' ? 'GK' : 'Bench') })) }]
             };
           }
@@ -265,14 +276,16 @@
           let subCount = 0;
           let lineups = []; 
 
-        // --- STARTER/BENCH LOGIC ---
+        // --- STARTER/BENCH LOGIC (Prioritizing Coach's Selection) ---
           const definedStarters = playersWithMinutes.filter(p => 
               p.startingPosition && 
               p.startingPosition !== 'Bench' && 
               p.startingPosition !== 'GK' && 
               p.name.trim() !== ''
           );
-
+          
+          const fullTimePlayers = playersWithMinutes.filter(p => p.minutes === matchDuration && p.role !== 'GK');
+          
           if (definedStarters.length === outfieldSpots) {
               let starterMap = new Map();
               definedStarters.forEach(p => {
@@ -283,18 +296,17 @@
               playing = positions.map((_, index) => starterMap.get(index)).filter(p => p); 
               
               const playingIDs = playing.map(p => p.id);
-              bench = allOutfieldPlayers.filter(p => !playingIDs.includes(p.id));
+              bench = allOutfieldPlayersInRotation.filter(p => !playingIDs.includes(p.id));
 
           } else {
               // Fallback: Use minute-based rotation for the starting lineup
-              let rotationQueue = [...allOutfieldPlayers];
+              let rotationQueue = [...allOutfieldPlayersInRotation];
               playing = rotationQueue.splice(0, outfieldSpots);
               bench = rotationQueue;
           }
         // --- END STARTER/BENCH LOGIC ---
 
-
-          // Record initial starting lineup for visualizer (using the determined 'playing' list)
+          // Record initial starting lineup for visualizer
           lineups.push({ 
               time: '0:00 (Start)', 
               players: allPlayers.map(p => ({ 
@@ -311,6 +323,11 @@
             plan += `${positions[i]}: ${p.name} (Target Mins/Half: ${Math.ceil(p.minutes / periods * 2)})\n`; 
           });
           plan += `\n`;
+          
+          if (fullTimePlayers.length > 0) {
+              plan += `*** Note: ${fullTimePlayers.map(p => p.name).join(', ')} is exempt from rotation (Full Match Mins set). ***\n\n`;
+          }
+
 
           for (let period = 1; period <= periods; period++) {
             const periodStart = (period - 1) * periodDuration;
@@ -352,12 +369,12 @@
             }
 
 
-            while (time <= periodEnd) {
-              if (bench.length === 0) break;
-
+            while (time <= periodEnd && bench.length > 0) {
+              
               const elapsed = time - lastSubTime;
               const outgoingCandidates = [];
 
+              // 1. Calculate time played in this period and identify outgoing candidates
               playing.forEach((player, index) => {
                   currentPeriodMinutes.set(player.id, (currentPeriodMinutes.get(player.id) || 0) + elapsed); 
                   outgoingCandidates.push({ 
@@ -368,34 +385,45 @@
                   });
               });
               
+              // Sort to find players who have played the most in this period
               outgoingCandidates.sort((a, b) => b.periodTimePlayed - a.periodTimePlayed);
               
-              const subsForThisWindow = Math.min(maxSubs, bench.length, outgoingCandidates.length);
+              const subsForThisWindow = Math.min(maxSubs, bench.length);
               const subsBlock = [];
-              
-              const playersToSubOut = outgoingCandidates.slice(0, subsForThisWindow);
               
-              // Item 4 & 8: Determine Incoming Player - Prioritize position match, then least minutes
-              let benchClone = [...bench].sort((a, b) => a.minutes - b.minutes);
+              let playersToSubOut = [];
+              let benchClone = [...bench]; // Use a clone for finding best matches
+              
+              // 2. Select players to sub out (based on max period time and finding a suitable incoming player)
+              for (let i = 0; i < subsForThisWindow; i++) {
+                  if (outgoingCandidates.length === 0) break;
+
+                  // Find the highest-minute outgoing player who can be replaced by *someone* on the bench
+                  const outgoing = outgoingCandidates.shift(); 
+                  playersToSubOut.push(outgoing);
+              }
               
               playersToSubOut.forEach((outgoing) => {
                   const position = outgoing.position;
                   let incoming = null;
                   let warning = '';
                   
-                  // 1. Try to find a player who prefers or accepts this position
-                  incoming = benchClone.find(p => p.preferredPosition === position || p.secondaryPosition === position);
-
-                  // 2. Fallback to the player with the least minutes overall
+                  // 1. Find a player who prefers or accepts this position (Pref > Sec)
+                  incoming = benchClone.find(p => p.preferredPosition === position);
                   if (!incoming) {
-                      incoming = benchClone[0]; // Already sorted by least minutes
+                      incoming = benchClone.find(p => p.secondaryPosition === position);
+                  }
+
+                  // 2. Fallback to the lowest-minute player overall
+                  if (!incoming) {
+                      // Sort the remaining benchClone by least overall minutes (already done)
+                      incoming = benchClone[0]; 
                       warning = ` (WARNING: ${incoming.name} is starting out of position!)`;
-                      plan += warning + '\n'; // Add warning to text plan
                   }
 
                   if (!incoming) return;
 
-                  // Remove the selected incoming player from the queue
+                  // Remove the selected incoming player from the queues
                   benchClone = benchClone.filter(p => p.id !== incoming.id);
                   bench = bench.filter(p => p.id !== incoming.id);
 
@@ -409,8 +437,10 @@
                       index: outgoing.index
                   });
                   
-                  // Add outgoing player to the end of the bench queue (FIFO for next rotation)
+                  // Add outgoing player to the end of the bench queue
                   bench.push(outgoing.player);
+                  
+                  if(warning) plan += warning + '\n';
               });
 
               if (subsBlock.length > 0) {
@@ -1220,7 +1250,7 @@
                         </div>
                         <div>
                           <label className="block text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>First Sub (min)</label>
-            1916             <select
+                          <select
                             value={settings.firstSubTime}
                             onChange={(e) => setSettings(p => ({ ...p, firstSubTime: parseInt(e.target.value, 10) }))}
                             className="w-full p-2 rounded-lg text-sm" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
