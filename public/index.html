@@ -31,6 +31,13 @@
         .custom-scrollbar::-webkit-scrollbar-track {
             background-color: #f0f4f8;
         }
+        /* Item 1: Clear borders/sections for sub controls */
+        .sub-control-block {
+            padding: 1rem;
+            border: 2px solid #56B0D5; /* SKY_BLUE */
+            border-radius: 0.5rem;
+            background-color: #F8FFFF; /* Very light subtle background */
+        }
     </style>
 </head>
 <body>
@@ -51,6 +58,7 @@
         const Unlock = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1rem', height: '1rem'}}>🔑</span>;
         const Loader2 = ({ className = '', style = {} }) => <span className={`${className} animate-spin`} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem'}}>🔄</span>;
         const Star = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1rem', height: '1rem'}}>⭐</span>;
+        const Download = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem'}}>⬇️</span>;
 
 
         const { useState, useEffect, useMemo, useCallback } = React;
@@ -161,8 +169,9 @@
             ],
         };
 
-        const ALL_POSITIONS = [
-          'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
+        // All positions plus 'Bench' for selection filtering
+        const ALL_POSITIONS_AND_BENCH = [
+          'Bench', 'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
           'CDM', 'CAM', 'RW', 'LW', 'ST', 'ST-R', 'ST-L'
         ];
         
@@ -185,19 +194,31 @@
           if (!matchDuration || matchDuration <= 0 || players.length === 0) return players;
           
           const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
-          const outfieldPlayers = players.filter(p => p.role !== 'GK');
+          
+          // 1. Determine players whose minutes need to be calculated (active outfield players)
+          const outfieldPlayers = players.filter(p => p.role !== 'GK' && p.name.trim() !== '');
           const numOutfieldPlayers = outfieldPlayers.length;
+          
           if (numOutfieldPlayers === 0) return players;
 
+          // 2. Calculate Total Available Outfield Minutes (Item 10 fix)
           const totalOutfieldMinutesAvailable = outfieldSpots * matchDuration;
+          
+          // 3. Calculate equal time (rounded down) and remaining minutes
           const baseEqualTime = Math.floor(totalOutfieldMinutesAvailable / numOutfieldPlayers);
           let remainderMinutes = totalOutfieldMinutesAvailable % numOutfieldPlayers;
 
           const updatedPlayers = players.map((player) => {
-            if (player.role === 'GK') {
-              return { ...player, minutes: isPermanentGK ? matchDuration : 0 };
+            // GK who plays full match
+            if (player.role === 'GK' && isPermanentGK) {
+              return { ...player, minutes: matchDuration };
             }
+            // GK who rotates or Bench players (minutes calculated later in plan logic, or 0 here if rotating GK is not handled by this function)
+            if (player.role === 'GK' || player.name.trim() === '') {
+                return { ...player, minutes: player.manualMinutes !== null ? player.manualMinutes : (player.role === 'GK' && !isPermanentGK ? baseEqualTime : 0) };
+            }
 
+            // Outfield player minute distribution
             let finalMinutes = baseEqualTime;
             if (remainderMinutes > 0) {
               finalMinutes += 1;
@@ -244,8 +265,7 @@
           let subCount = 0;
           let lineups = []; 
 
-        // --- CORE STARTER LOGIC FIX ---
-          // 1. Identify explicitly defined starters (players with a position other than 'Bench' or 'GK')
+        // --- STARTER/BENCH LOGIC ---
           const definedStarters = playersWithMinutes.filter(p => 
               p.startingPosition && 
               p.startingPosition !== 'Bench' && 
@@ -253,32 +273,25 @@
               p.name.trim() !== ''
           );
 
-          // 2. Separate starters and substitutes based on the coach's input
           if (definedStarters.length === outfieldSpots) {
-              
-              // Use the defined starters exactly as they form the playing list
               let starterMap = new Map();
               definedStarters.forEach(p => {
                   const index = positions.indexOf(p.startingPosition);
                   if (index !== -1) starterMap.set(index, p);
               });
               
-              // Sort starters into the playing array based on the position index order
               playing = positions.map((_, index) => starterMap.get(index)).filter(p => p); 
               
-              // Bench is everyone else who is an active outfield player
               const playingIDs = playing.map(p => p.id);
               bench = allOutfieldPlayers.filter(p => !playingIDs.includes(p.id));
 
           } else {
               // Fallback: Use minute-based rotation for the starting lineup
-              // Note: We need a fresh copy of the array for splicing
               let rotationQueue = [...allOutfieldPlayers];
               playing = rotationQueue.splice(0, outfieldSpots);
               bench = rotationQueue;
           }
-        // --- END CORE STARTER LOGIC FIX ---
-
+        // --- END STARTER/BENCH LOGIC ---
 
           // Record initial starting lineup for visualizer (using the determined 'playing' list)
           lineups.push({ 
@@ -289,7 +302,6 @@
               }))
           });
           
-          // *CRITICAL FIX*: Re-initialize currentPeriodMinutes using the full set of players that ARE in rotation
           let playersInRotation = [...playing, ...bench];
           let currentPeriodMinutes = new Map(playersInRotation.map(p => [p.id, 0]));
 
@@ -346,7 +358,6 @@
               const outgoingCandidates = [];
 
               playing.forEach((player, index) => {
-                  // Ensure player exists in the map before incrementing
                   currentPeriodMinutes.set(player.id, (currentPeriodMinutes.get(player.id) || 0) + elapsed); 
                   outgoingCandidates.push({ 
                       player, 
@@ -362,13 +373,32 @@
               const subsBlock = [];
               
               const playersToSubOut = outgoingCandidates.slice(0, subsForThisWindow);
+              
+              // Item 4: Determine Incoming Player - Prioritize position match, then least minutes
               let incomingCandidates = [...bench].sort((a, b) => a.minutes - b.minutes);
-              
+              
               playersToSubOut.forEach((outgoing) => {
                   const position = outgoing.position;
-                  const incoming = incomingCandidates.shift();
+                  let incoming = null;
+                  let warning = '';
+                  
+                  // 1. Try to find a player who prefers or accepts this position
+                  incoming = incomingCandidates.find(p => p.preferredPosition === position || p.secondaryPosition === position);
+
+                  // 2. Fallback to the player with the least minutes overall
+                  if (!incoming) {
+                      incoming = incomingCandidates[0]; // Already sorted by least minutes
+                      warning = ` (WARNING: ${incoming.name} is starting out of position!)`;
+                      plan += warning + '\n'; // Add warning to text plan
+                  }
+
                   if (!incoming) return;
 
+                  // Remove the selected incoming player from the queue
+                  incomingCandidates = incomingCandidates.filter(p => p.id !== incoming.id);
+                  bench = bench.filter(p => p.id !== incoming.id);
+
+                  // Update the field lineup
                   playing[outgoing.index] = incoming;
                   
                   subsBlock.push({
@@ -378,7 +408,7 @@
                       index: outgoing.index
                   });
                   
-                  bench = bench.filter(p => p.id !== incoming.id);
+                  // Add outgoing player to the end of the bench queue (FIFO for next rotation)
                   bench.push(outgoing.player);
               });
 
@@ -414,18 +444,67 @@
           return { planText: plan, lineups };
         };
 
+        // Item 5: Download function implementation
+        const handleDownloadPlan = (matchPlan, settings, players) => {
+            const playersWithMinutes = calculateEqualMinutes(settings, players);
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            // Header Row
+            csvContent += "Time,On Player,Off Player,Position,Notes\n";
+
+            // Process Plan Text into CSV lines
+            const planLines = matchPlan.split('\n');
+            let time = 0;
+            
+            planLines.forEach(line => {
+                if (line.startsWith('--- Substitution at')) {
+                    const match = line.match(/Substitution at (\d+):00/);
+                    if (match) time = match[1];
+                } else if (line.startsWith('ON:')) {
+                    const match = line.match(/ON: (.+?) \((.+?) slot\) \| OFF: (.+)/);
+                    if (match) {
+                        const [, onPlayer, position, offPlayer] = match;
+                        csvContent += `${time},"${onPlayer}","${offPlayer}","${position}",""\n`;
+                    }
+                }
+            });
+
+            // Add Minutes Summary
+            csvContent += "\nPlayer,Role,Minutes,Manual_Override\n";
+            playersWithMinutes
+                .filter(p => p.name.trim() !== '')
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(p => {
+                    const role = p.role;
+                    const manual = p.manualMinutes !== null ? 'Yes' : 'No';
+                    csvContent += `"${p.name}","${role}",${p.minutes},${manual}\n`;
+                });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `MatchPlan_${settings.gameFormat}_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
 
         // --- UI COMPONENTS ---
 
         const PlayerInputRow = ({ player, index, settings, setPlayers, subscriptionTier, allPositions }) => {
           const isChampionship = subscriptionTier !== 'Basic';
           const isPremiership = subscriptionTier === 'Premiership';
-          // Filter available positions: GK only for player 1, all others for everyone else + 'Bench'
-          const availablePositions = (index === 0) 
-            ? ['GK', ...ALL_POSITIONS.filter(p => p !== 'GK')] // GK must be an option for player 1
-            : ['Bench', ...ALL_POSITIONS.filter(p => p !== 'GK')]; // 'Bench' option for all outfield players
+            
+          const currentFormationSlots = useMemo(() => {
+            // Item 7 & 9: Only show positions relevant to the current formation
+            const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+            return ['Bench', 'GK', ...slots].filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
+          }, [settings.gameFormat, settings.selectedFormation]);
 
-          const handleChange = (field, value) => {
+
+          const handleChange = (field, value) => {
             setPlayers(prev => prev.map(p => {
                 if (p.id !== player.id) return p;
 
@@ -444,6 +523,11 @@
                 } else if (p.role !== 'Outfield' && updated.preferredPosition !== 'GK') {
                      updated.role = 'Outfield';
                 }
+                
+                // Ensure starting position is not set to GK for non-player 1
+                if (index !== 0 && field === 'startingPosition' && value === 'GK') {
+                    updated.startingPosition = 'Bench';
+                }
 
                 return updated;
             }));
@@ -459,24 +543,24 @@
                 onChange={(e) => handleChange('name', e.target.value)}
                 className="flex-grow p-2 border rounded-lg focus:ring-sky-blue focus:border-sky-blue transition duration-150"
               />
-                {/* Starting Position (includes 'Bench') */}
+                {/* Starting Position (filtered) */}
                 <select
                     value={player.startingPosition || ''}
                     onChange={(e) => handleChange('startingPosition', e.target.value)}
                     className="p-2 border rounded-lg w-28 text-sm bg-white"
                 >
                     <option value="">Start Pos.</option>
-                    {availablePositions.map(pos => <option key={`start-${pos}`} value={pos}>{pos}</option>)}
+                    {currentFormationSlots.filter(p => index === 0 ? true : p !== 'GK').map(pos => <option key={`start-${pos}`} value={pos}>{pos}</option>)}
                 </select>
 
-                {/* Preferred Position (manual override allowed) */}
+                {/* Preferred Position (filtered - no Bench option) */}
               <select
                 value={player.preferredPosition}
                 onChange={(e) => handleChange('preferredPosition', e.target.value)}
                 className="p-2 border rounded-lg w-28 text-sm bg-white"
               >
                 <option value="">Pref. Pos.</option>
-                {availablePositions.filter(p => p !== 'Bench').map(pos => <option key={`pref-${pos}`} value={pos}>{pos}</option>)}
+                {currentFormationSlots.filter(p => p !== 'Bench').map(pos => <option key={`pref-${pos}`} value={pos}>{pos}</option>)}
               </select>
 
               {isChampionship && (
@@ -486,7 +570,7 @@
                   className={`p-2 border rounded-lg w-28 text-sm bg-white`}
                 >
                   <option value="">Sec. Pos.</option>
-                  {availablePositions.filter(p => p !== 'Bench').map(pos => <option key={`sec-${pos}`} value={pos}>{pos}</option>)}
+                  {currentFormationSlots.filter(p => p !== 'Bench').map(pos => <option key={`sec-${pos}`} value={pos}>{pos}</option>)}
                 </select>
               )}
 
@@ -504,7 +588,6 @@
         };
 
         const PlayerCircle = ({ name, position, isGK, color = COLORS.SKY_BLUE, yPos, xPos }) => {
-            // Displays position code inside the circle
             const displayPos = position.length > 4 ? position.replace('-', '/') : position;
             const firstName = name.split(' ')[0];
             
@@ -829,16 +912,28 @@
 
 
           const handleGeneratePlan = () => {
-            if (activePlayers.length < outfieldSpots + 1) {
-              setMatchPlan('Error: Not enough players to fill the formation spots.');
-              setMatchLineups([]);
-              return;
-            }
-            if (!settings.matchDuration || settings.matchDuration <= 0) {
-              setMatchPlan('Error: Match duration must be greater than zero.');
-              setMatchLineups([]);
-              return;
-            }
+            const formationPositions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+            const numPositions = formationPositions.length;
+            const gkPlayer = displayedPlayers.find(p => p.role === 'GK');
+
+            // --- Validation (Item 3) ---
+            const starters = displayedPlayers.filter(p => p.startingPosition && p.startingPosition !== 'Bench' && p.role !== 'GK' && p.name.trim() !== '');
+            const starterPositions = starters.map(p => p.startingPosition);
+            const uniqueStarterPositions = new Set(starterPositions);
+            
+            if (!gkPlayer || gkPlayer.name.trim() === '') {
+                setMatchPlan('Error: Goalkeeper must be selected (Player 1 defaulted to GK role).');
+                return;
+            }
+            if (starterPositions.length < numPositions) {
+                setMatchPlan(`Error: You must select exactly ${numPositions} starting outfield positions for the ${settings.selectedFormation} formation.`);
+                return;
+            }
+            if (starterPositions.length > uniqueStarterPositions.size) {
+                setMatchPlan('Error: More than one player is assigned to the same starting position slot.');
+                return;
+            }
+            // --- End Validation ---
 
             setIsGenerating(true);
             setMatchPlan('');
@@ -853,9 +948,8 @@
                 if (settings.planType === 'Automatic') {
                   planResult = generateAutomaticPlan(settings, playersWithCalculatedMinutes);
                 } else {
-                  // Manual Plan Placeholder (Still generates a starting lineup visual)
-                  const gkPlayer = playersWithCalculatedMinutes.find(p => p.role === 'GK');
-                  const outfieldStarters = playersWithCalculatedMinutes.filter(p => p.role !== 'GK').slice(0, outfieldSpots);
+                  // Manual Plan Placeholder 
+                  const outfieldStarters = playersWithCalculatedMinutes.filter(p => p.startingPosition && p.startingPosition !== 'Bench' && p.role !== 'GK');
                   const positions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
 
                   const startingLineupPlayers = playersWithCalculatedMinutes.map(p => ({
@@ -921,7 +1015,7 @@
             <div className="p-4 md:p-8 min-h-screen" style={{ backgroundColor: COLORS.WHITE, fontFamily: 'Inter, sans-serif' }}>
               <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{ borderColor: COLORS.NAVY_BLUE }}>
                 <div className="flex items-center space-x-4">
-                  {/* LOGO FIX: Replace the placeholder below with your direct Cloudinary URL */}
+                  {/* LOGO FIX: Using your provided Cloudinary URL */}
                   <img
                     src="https://res.cloudinary.com/df5od6eln/image/upload/v1760535162/TGGP_logo_2_doknd6.png" 
                     alt="The Girls' Game Plan Logo" 
@@ -1108,7 +1202,7 @@
                     </div>
 
                     {settings.planType === 'Automatic' && (
-                      <div className={`grid grid-cols-3 gap-4 p-4 rounded-lg border-dashed border ${isPremiership ? '' : 'opacity-50 pointer-events-none bg-gray-50'}`} style={{ borderColor: COLORS.NAVY_BLUE }}>
+                      <div className="sub-control-block grid grid-cols-3 gap-4">
                         <p className={`col-span-3 text-sm font-semibold mb-2 ${isPremiership ? 'text-gray-700' : 'text-orange-500'}`}>
                           {isPremiership ? 'Substitution Frequency (Premiership)' : 'Upgrade to Premiership for Sub Control'}
                         </p>
@@ -1165,6 +1259,13 @@
                     <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed" style={{ color: COLORS.NAVY_BLUE }}>
                       {matchPlan || 'Press "Generate Match Plan" to see the schedule here. Match info will display the selected periods for 5v5.'}
                     </pre>
+                     {matchPlan && (
+                        <div className="mt-4">
+                            <Button onClick={() => handleDownloadPlan(matchPlan, settings, displayedPlayers)} color={COLORS.NAVY_BLUE}>
+                                <Download className="w-5 h-5 mr-2"/> Download Plan (CSV)
+                            </Button>
+                        </div>
+                     )}
                   </div>
 
                   <div className="p-6 rounded-xl shadow-xl bg-white">
@@ -1184,6 +1285,7 @@
                     {settings.selectedFormation && (
                       <PositionVisualizer 
                             settings={settings} 
+                            // Ensure the initial lineup is passed if no plan has been generated
                             lineups={matchLineups.length > 0 ? matchLineups : [{ players: displayedPlayers.map(p => ({...p, position: p.startingPosition || 'Bench'})), time: 'Current Roster'}]} 
                             currentLineupIndex={currentLineupIndex}
                             isPremiership={isPremiership}
