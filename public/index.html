@@ -3,9 +3,10 @@
 <head>
     <title>The Girls' Game Planner</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> 
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
@@ -169,7 +170,6 @@
             ],
         };
 
-        // All positions plus 'Bench' for selection filtering
         const ALL_POSITIONS_AND_BENCH = [
           'Bench', 'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
           'CDM', 'CAM', 'RW', 'LW', 'ST', 'ST-R', 'ST-L'
@@ -293,6 +293,7 @@
           }
         // --- END STARTER/BENCH LOGIC ---
 
+
           // Record initial starting lineup for visualizer (using the determined 'playing' list)
           lineups.push({ 
               time: '0:00 (Start)', 
@@ -374,8 +375,8 @@
               
               const playersToSubOut = outgoingCandidates.slice(0, subsForThisWindow);
               
-              // Item 4: Determine Incoming Player - Prioritize position match, then least minutes
-              let incomingCandidates = [...bench].sort((a, b) => a.minutes - b.minutes);
+              // Item 4 & 8: Determine Incoming Player - Prioritize position match, then least minutes
+              let benchClone = [...bench].sort((a, b) => a.minutes - b.minutes);
               
               playersToSubOut.forEach((outgoing) => {
                   const position = outgoing.position;
@@ -383,11 +384,11 @@
                   let warning = '';
                   
                   // 1. Try to find a player who prefers or accepts this position
-                  incoming = incomingCandidates.find(p => p.preferredPosition === position || p.secondaryPosition === position);
+                  incoming = benchClone.find(p => p.preferredPosition === position || p.secondaryPosition === position);
 
                   // 2. Fallback to the player with the least minutes overall
                   if (!incoming) {
-                      incoming = incomingCandidates[0]; // Already sorted by least minutes
+                      incoming = benchClone[0]; // Already sorted by least minutes
                       warning = ` (WARNING: ${incoming.name} is starting out of position!)`;
                       plan += warning + '\n'; // Add warning to text plan
                   }
@@ -395,7 +396,7 @@
                   if (!incoming) return;
 
                   // Remove the selected incoming player from the queue
-                  incomingCandidates = incomingCandidates.filter(p => p.id !== incoming.id);
+                  benchClone = benchClone.filter(p => p.id !== incoming.id);
                   bench = bench.filter(p => p.id !== incoming.id);
 
                   // Update the field lineup
@@ -498,9 +499,8 @@
           const isPremiership = subscriptionTier === 'Premiership';
             
           const currentFormationSlots = useMemo(() => {
-            // Item 7 & 9: Only show positions relevant to the current formation
             const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
-            return ['Bench', 'GK', ...slots].filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
+            return ['Bench', 'GK', ...slots].filter((v, i, a) => a.indexOf(v) === i); 
           }, [settings.gameFormat, settings.selectedFormation]);
 
 
@@ -523,7 +523,7 @@
                 } else if (p.role !== 'Outfield' && updated.preferredPosition !== 'GK') {
                      updated.role = 'Outfield';
                 }
-                
+
                 // Ensure starting position is not set to GK for non-player 1
                 if (index !== 0 && field === 'startingPosition' && value === 'GK') {
                     updated.startingPosition = 'Bench';
@@ -543,7 +543,7 @@
                 onChange={(e) => handleChange('name', e.target.value)}
                 className="flex-grow p-2 border rounded-lg focus:ring-sky-blue focus:border-sky-blue transition duration-150"
               />
-                {/* Starting Position (filtered) */}
+                {/* Starting Position (includes 'Bench') */}
                 <select
                     value={player.startingPosition || ''}
                     onChange={(e) => handleChange('startingPosition', e.target.value)}
@@ -553,7 +553,7 @@
                     {currentFormationSlots.filter(p => index === 0 ? true : p !== 'GK').map(pos => <option key={`start-${pos}`} value={pos}>{pos}</option>)}
                 </select>
 
-                {/* Preferred Position (filtered - no Bench option) */}
+                {/* Preferred Position (manual override allowed) */}
               <select
                 value={player.preferredPosition}
                 onChange={(e) => handleChange('preferredPosition', e.target.value)}
@@ -588,6 +588,7 @@
         };
 
         const PlayerCircle = ({ name, position, isGK, color = COLORS.SKY_BLUE, yPos, xPos }) => {
+            // Displays position code inside the circle
             const displayPos = position.length > 4 ? position.replace('-', '/') : position;
             const firstName = name.split(' ')[0];
             
@@ -1165,7 +1166,7 @@
                           settings={settings}
                           setPlayers={setPlayers}
                           subscriptionTier={subscriptionTier}
-                          allPositions={ALL_POSITIONS}
+                          allPositions={ALL_POSITIONS_AND_BENCH}
                         />
                       ))}
                     </div>
@@ -1219,7 +1220,7 @@
                         </div>
                         <div>
                           <label className="block text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>First Sub (min)</label>
-                          <select
+            1916             <select
                             value={settings.firstSubTime}
                             onChange={(e) => setSettings(p => ({ ...p, firstSubTime: parseInt(e.target.value, 10) }))}
                             className="w-full p-2 rounded-lg text-sm" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
