@@ -27,6 +27,20 @@
 <body>
   <div id="root"></div>
 
+  <script>
+    // Show a simple banner if any runtime error happens (so we never see a "silent" blank page)
+    window.addEventListener('error', (e) => {
+      const root = document.getElementById('root');
+      if (!root) return;
+      if (document.getElementById('errbox')) return;
+      const box = document.createElement('div');
+      box.id = 'errbox';
+      box.style.cssText = 'background:#fee;border:1px solid #f88;color:#900;padding:8px 10px;font-family:monospace;margin:8px;border-radius:6px';
+      box.textContent = 'JS Error: ' + (e.error?.message || e.message || 'Unknown');
+      root.prepend(box);
+    });
+  </script>
+
   <script type="text/babel">
     // --- tiny icon helpers ---
     const Icon = ({children, className='', style={}}) => <span className={className} style={{...style, display:'inline-flex', alignItems:'center', width:'1.1rem', height:'1.1rem', lineHeight:1}}>{children}</span>;
@@ -64,7 +78,7 @@
         { name:'2-3-1', slots:['CD-R','CD-L','CM-R','CM-L','CM','ST'], maxPlayers:6 },
         { name:'1-2-3', slots:['CD','CM-R','CM-L','ST-R','ST-L','ST'], maxPlayers:6 },
         { name:'1-4-1', slots:['CD','CM-R','CM-L','RW','LW','ST'], maxPlayers:6 },
-        // NEW: tester requested 3-2-1
+        // NEW: tester-requested 3-2-1
         { name:'3-2-1', slots:['CD-R','CD','CD-L','CM-R','CM-L','ST'], maxPlayers:6 },
       ],
       '9v9': [
@@ -92,9 +106,9 @@
     // mock "db"
     const mockDb = new Map();
     const useFirebase = () => {
-      const [userId] = useState('mock-user-12345');
-      const [isAuthReady] = useState(true);
-      const [error] = useState(null);
+      const [userId] = React.useState('mock-user-12345');
+      const [isAuthReady] = React.useState(true);
+      const [error] = React.useState(null);
       const api = React.useMemo(()=>({
         collection:(p)=>({path:p}), query:(c)=>({...c}),
         getDocs: async(q)=>{ const prefix=`${q.path}:`; const docs=[...mockDb.entries()].filter(([k])=>k.startsWith(prefix)).map(([k,v])=>({id:k.split(':').pop(), data:()=>v})); return {docs}; },
@@ -106,7 +120,7 @@
       return {db:api, userId, isAuthReady, firestorePath, error};
     };
 
-    // --- minutes: equal w/ target-min support ---
+    // minutes calc with target minimums
     const calculateMinutesWithTargets = (settings, players) => {
       const { gameFormat, matchDuration, isPermanentGK } = settings;
       if (!matchDuration || matchDuration<=0) return {error:null, players};
@@ -146,7 +160,6 @@
       return { error:null, players: out };
     };
 
-    // sub suggestion
     const recommendSubs = (settings, squadCount) => {
       const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
       const benchCount = Math.max(0, squadCount - outfieldSpots - (settings.isPermanentGK ? 1 : 0));
@@ -157,7 +170,6 @@
       return { subInterval, firstSubTime, maxSubs, note: `Suggested for ${squadCount} players (${benchCount} bench).` };
     };
 
-    // bench priority weighting
     const priorityScore = (p) => (p.benchPriority==='High'? -2 : p.benchPriority==='Normal'? 0 : 2);
 
     const generateAutomaticPlan = (settings, playersWithMinutes) => {
@@ -189,7 +201,6 @@
 
       let playing=[], bench=[], subCount=0, lineups=[];
 
-      // honour coach starters exactly matching the slots
       const starters = playersWithMinutes.filter(p=> p.startingPosition && p.startingPosition!=='Bench' && p.role!=='GK' && p.name.trim()!=='');
       if (starters.length === outfieldSpots) {
         const starterMap = new Map();
@@ -203,7 +214,6 @@
         bench = q;
       }
 
-      // start lineup
       lineups.push({
         time:'0:00 (Start)',
         players: allPlayers.map(p=>({...p, position: p.role==='GK' ? 'GK' : (playing.find(pl=>pl.id===p.id) ? positions[playing.findIndex(pl=>pl.id===p.id)] : 'Bench')}))
@@ -399,9 +409,7 @@
       );
     };
 
-    // UPDATED: PlayerCircle shows first name in bubble + small position badge
     const PlayerCircle = ({ name, position, isGK, color, yPos, xPos, draggable, onDragStart, onClick }) => {
-      const shortPos = (position||'').replace('-R','R').replace('-L','L');
       const firstName = (name||'').split(' ')[0] || '';
       return (
         <div className="absolute flex flex-col items-center justify-center transition-all duration-200 ease-in-out"
@@ -416,14 +424,12 @@
       );
     };
 
-    // Pitch with assign mode & lineup-aware slot bubbles
     const PositionVisualizer = ({
       settings, lineups, currentLineupIndex, isPremiership,
       isAssignMode, displayedPlayers, setPlayers, selectedForTap, setSelectedForTap
     }) => {
       const displayLineup = lineups[currentLineupIndex] || { players:[], time:'N/A' };
 
-      // slot coordinates
       const coords = (pos)=>{
         const map = {
           GK:{y:95,x:50}, RB:{y:80,x:15}, LB:{y:80,x:85},
@@ -457,7 +463,6 @@
 
       const positions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
 
-      // Build a map from current lineup: position -> player (for live view)
       const currentPosMap = new Map();
       (displayLineup.players || []).forEach(pl => {
         if (pl.position && pl.position!=='Bench') currentPosMap.set(pl.position, pl);
@@ -465,9 +470,6 @@
 
       const slotBubbles = positions.map(pos=>{
         const {y,x} = coords(pos);
-        // Occupant label depends on mode:
-        // - Assign mode: show from startingPosition (roster)
-        // - Live view: show from current lineup event
         let occupantName = '';
         if (isAssignMode) {
           const rosterOccupant = displayedPlayers.find(p=>p.startingPosition===pos && p.role!=='GK');
@@ -486,7 +488,7 @@
                onClick={isAssignMode && selectedForTap ? ()=>{ assignPlayerToPos(selectedForTap, pos); setSelectedForTap(null);} : undefined}
                style={{top:`${y}%`, left:`${x}%`, transform:'translate(-50%,-50%)'}}>
             <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-white"
-                 style={{backgroundColor: occupantName ? 'rgba(86,176,213,.9)' : 'rgba(255,255,255,.12)', borderColor:COLORS.WHITE}}>
+                 style={{backgroundColor: occupantName ? 'rgba(86,176,213,.9)' : 'rgba(255,255,255,.12)', borderColor:'#ffffff'}}>
               {pos}
             </div>
             {occupantName && (
@@ -503,7 +505,6 @@
         : (displayLineup.players || []).find(p=>p.position==='GK');
       const gkC = coords('GK');
 
-      // Visual Player Bubbles (from current lineup)
       const visualPlayers = (displayLineup.players || [])
         .filter(p=>p.position && p.position!=='Bench' && (p.name||'').trim()!=='')
         .map(p=>{
@@ -523,14 +524,13 @@
 
       return (
         <div className="relative w-full h-96 border-4 border-green-800 bg-green-700/80 rounded-xl overflow-hidden shadow-inner">
-          {/* pitch lines */}
           <div className="absolute inset-0 border-white border-2 m-4 rounded-lg opacity-80">
             <div className="absolute top-1/2 left-1/2 w-20 h-20 border-white border-2 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
             <div className="absolute top-0 left-1/2 w-40 h-10 border-white border-2 -translate-x-1/2"></div>
             <div className="absolute bottom-0 left-1/2 w-40 h-10 border-white border-2 -translate-x-1/2 -scale-y-100"></div>
           </div>
 
-          {/* GK slot */}
+          {/* GK */}
           <div className={`absolute ${isAssignMode?'drop-slot':''}`} style={{top:`${gkC.y}%`, left:`${gkC.x}%`, transform:'translate(-50%,-50%)' }}
                onDragOver={isAssignMode? onDragOver: undefined}
                onDragLeave={isAssignMode? onDragLeave: undefined}
@@ -538,7 +538,7 @@
                onClick={isAssignMode && selectedForTap ? ()=>{ assignPlayerToPos(selectedForTap, 'GK'); setSelectedForTap(null);} : undefined}
           >
             <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-white"
-                 style={{backgroundColor: gk ? COLORS.NAVY_BLUE : 'rgba(255,255,255,.12)', borderColor:COLORS.WHITE}}>
+                 style={{backgroundColor: gk ? COLORS.NAVY_BLUE : 'rgba(255,255,255,.12)', borderColor:'#ffffff'}}>
               GK
             </div>
             {gk && <div className="text-[10px] mt-1 text-center font-medium" style={{color:'#fff'}}>{(gk.name||'').split(' ')[0]}</div>}
@@ -550,7 +550,6 @@
           {/* player bubbles from current lineup */}
           {visualPlayers}
 
-          {/* overlays */}
           <div className="absolute bottom-2 right-2 text-xs font-semibold text-white bg-black/50 px-2 py-1 rounded">
             {settings.gameFormat} - {settings.selectedFormation} ({displayLineup.time})
           </div>
@@ -844,7 +843,7 @@
                   )}
 
                   <label className="block pt-2">Squad Size</label>
-                  <!-- FIXED: accept 8 (no leading zero) -->
+                  {/* FIXED: accept 8 (no leading zero) */}
                   <input type="number" min={outfieldSpots + (settings.isPermanentGK?1:0)} value={settings.squadSize}
                          onChange={e=>{
                            const val = e.target.value;
