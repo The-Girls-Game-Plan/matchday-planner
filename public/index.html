@@ -1,1068 +1,909 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>The Girls' Game Planner</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- React + Babel UMD -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { margin:0; padding:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans"; background:#f0f4f8; }
-    pre { white-space: pre-wrap; word-wrap: break-word; }
-    .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #56B0D5; border-radius: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background-color: #f0f4f8; }
-    .sub-control-block { padding:1rem; border:2px solid #56B0D5; border-radius:0.5rem; background:#F8FFFF; }
-    .drop-slot { transition: transform .1s ease, box-shadow .1s ease; }
-    .drop-slot.dragover { transform: scale(1.06); box-shadow: 0 0 0 3px rgba(86,176,213,.6) inset; }
-    .pos-badge {
-      position:absolute; top:-6px; right:-6px; font-size:10px; line-height:1; 
-      background: rgba(0,0,0,.65); color:#fff; padding:2px 4px; border-radius:6px;
-      border:1px solid rgba(255,255,255,.35);
-    }
-  </style>
+    <title>The Girls' Game Planner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- React + Babel UMD -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #56B0D5; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background-color: #f0f4f8; }
+        .sub-control-block { padding: 1rem; border: 2px solid #56B0D5; border-radius: 0.5rem; background-color: #F8FFFF; }
+    </style>
 </head>
 <body>
-  <div id="root"></div>
+    <div id="root"></div>
 
-  <script>
-    // Show a simple banner if any runtime error happens (so we never see a "silent" blank page)
-    window.addEventListener('error', (e) => {
-      const root = document.getElementById('root');
-      if (!root) return;
-      if (document.getElementById('errbox')) return;
-      const box = document.createElement('div');
-      box.id = 'errbox';
-      box.style.cssText = 'background:#fee;border:1px solid #f88;color:#900;padding:8px 10px;font-family:monospace;margin:8px;border-radius:6px';
-      box.textContent = 'JS Error: ' + (e.error?.message || e.message || 'Unknown');
-      root.prepend(box);
-    });
-  </script>
-
-  <script type="text/babel">
-    // --- tiny icon helpers ---
-    const Icon = ({children, className='', style={}}) => <span className={className} style={{...style, display:'inline-flex', alignItems:'center', width:'1.1rem', height:'1.1rem', lineHeight:1}}>{children}</span>;
-    const User = (p) => <Icon {...p}>👤</Icon>;
-    const Settings = (p) => <Icon {...p} style={{...p.style, width:'1.4rem',height:'1.4rem'}}>⚙️</Icon>;
-    const Play = (p) => <Icon {...p}>▶️</Icon>;
-    const SaveI = (p) => <Icon {...p}>💾</Icon>;
-    const Unlock = (p) => <Icon {...p}>🔑</Icon>;
-    const Loader2 = (p) => <span className={`${p.className||''} animate-spin`} style={{...p.style, display:'inline-flex', alignItems:'center', width:'1.1rem', height:'1.1rem', lineHeight:1}}>🔄</span>;
-    const Star = (p) => <Icon {...p}>⭐</Icon>;
-    const Download = (p) => <Icon {...p}>⬇️</Icon>;
-    const CopyI = (p) => <Icon {...p}>📋</Icon>;
-    const DragI = (p) => <Icon {...p}>✋</Icon>;
-    const TapI  = (p) => <Icon {...p}>👆</Icon>;
-
-    const {useState, useEffect, useMemo, useCallback} = React;
-
-    // --- basic utils / mock db ---
-    const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8); return v.toString(16);
-    });
-
-    const COLORS = { NAVY_BLUE:'#193755', ORANGE:'#E97227', SKY_BLUE:'#56B0D5', WHITE:'#FFFFFF', GOLD:'#AF9542' };
-    const MATCH_DURATIONS = { '5v5':40, '7v7':50, '9v9':60, '11v11':70 };
-    const FORMATIONS = {
-      '5v5': [
-        { name:'1-2-1', slots:['CD','CM-R','CM-L','ST'], maxPlayers:4 },
-        { name:'2-1-1', slots:['CD-R','CD-L','CM','ST'], maxPlayers:4 },
-        { name:'1-1-2', slots:['CD','CM','ST-R','ST-L'], maxPlayers:4 },
-      ],
-      '7v7': [
-        { name:'2-1-3', slots:['CD-R','CD-L','CM','ST-R','ST-L','ST'], maxPlayers:6 },
-        { name:'2-2-2', slots:['CD-R','CD-L','CM-R','CM-L','ST-R','ST-L'], maxPlayers:6 },
-        { name:'1-3-2', slots:['CD','CM-R','CM-L','CM','ST-R','ST-L'], maxPlayers:6 },
-        { name:'2-3-1', slots:['CD-R','CD-L','CM-R','CM-L','CM','ST'], maxPlayers:6 },
-        { name:'1-2-3', slots:['CD','CM-R','CM-L','ST-R','ST-L','ST'], maxPlayers:6 },
-        { name:'1-4-1', slots:['CD','CM-R','CM-L','RW','LW','ST'], maxPlayers:6 },
-        // NEW: tester-requested 3-2-1
-        { name:'3-2-1', slots:['CD-R','CD','CD-L','CM-R','CM-L','ST'], maxPlayers:6 },
-      ],
-      '9v9': [
-        { name:'3-2-3', slots:['CD-R','CD-L','CD','CM-R','CM-L','ST-R','ST-L','ST'], maxPlayers:8 },
-        { name:'3-3-2', slots:['CD-R','CD-L','CD','CM-R','CM-L','CDM','ST-R','ST-L'], maxPlayers:8 },
-        { name:'3-4-1', slots:['CD-R','CD-L','CD','RB','LB','CM','CDM','ST'], maxPlayers:8 },
-        { name:'3-2-1-2', slots:['CD-R','CD-L','CD','CDM-R','CDM-L','CAM','ST-R','ST-L'], maxPlayers:8 },
-        { name:'2-4-2', slots:['CD-R','CD-L','CM-R','CM-L','CDM','CAM','ST-R','ST-L'], maxPlayers:8 },
-        { name:'2-3-3', slots:['CD-R','CD-L','CM-R','CM-L','CDM','ST-R','ST-L','ST'], maxPlayers:8 },
-        { name:'2-2-4', slots:['CD-R','CD-L','CM-R','CM-L','ST-R','ST-L','RW','LW'], maxPlayers:8 },
-      ],
-      '11v11': [
-        { name:'4-4-2', slots:['RB','LB','CD-R','CD-L','RW','LW','CM-R','CM-L','ST-R','ST-L'], maxPlayers:10 },
-        { name:'4-3-3', slots:['RB','LB','CD-R','CD-L','CM-R','CM-L','CDM','RW','LW','ST'], maxPlayers:10 },
-        { name:'4-2-3-1', slots:['RB','LB','CD-R','CD-L','CDM-R','CDM-L','RW','LW','CAM','ST'], maxPlayers:10 },
-        { name:'4-1-4-1', slots:['RB','LB','CD-R','CD-L','CDM','CM-R','CM-L','RW','LW','ST'], maxPlayers:10 },
-        { name:'4-2-4', slots:['RB','LB','CD-R','CD-L','CM-R','CM-L','ST-R','ST-L','RW','LW'], maxPlayers:10 },
-        { name:'3-5-2', slots:['CD-R','CD-L','CD','CM-R','CM-L','CDM','CAM','RW','ST-R','ST-L'], maxPlayers:10 },
-        { name:'3-4-3', slots:['CD-R','CD-L','CD','CM-R','CM-L','CDM','CAM','RW','LW','ST'], maxPlayers:10 },
-      ],
-    };
-    const getOutfieldSlots = (format, formationName) => FORMATIONS[format]?.find(x=>x.name===formationName)?.slots || [];
-    const getOutfieldMaxPlayers = (format) => FORMATIONS[format]?.[0]?.maxPlayers || 0;
-
-    // mock "db"
-    const mockDb = new Map();
-    const useFirebase = () => {
-      const [userId] = React.useState('mock-user-12345');
-      const [isAuthReady] = React.useState(true);
-      const [error] = React.useState(null);
-      const api = React.useMemo(()=>({
-        collection:(p)=>({path:p}), query:(c)=>({...c}),
-        getDocs: async(q)=>{ const prefix=`${q.path}:`; const docs=[...mockDb.entries()].filter(([k])=>k.startsWith(prefix)).map(([k,v])=>({id:k.split(':').pop(), data:()=>v})); return {docs}; },
-        doc:(c,id=generateUUID())=>({path:c.path,id}),
-        setDoc: async (d,data)=>{ mockDb.set(`${d.path}:${d.id}`, data) },
-        deleteDoc: async (d)=>{ mockDb.delete(`${d.path}:${d.id}`) }
-      }),[]);
-      const firestorePath = `mock_db:mock-app:${userId}:squads`;
-      return {db:api, userId, isAuthReady, firestorePath, error};
-    };
-
-    // minutes calc with target minimums
-    const calculateMinutesWithTargets = (settings, players) => {
-      const { gameFormat, matchDuration, isPermanentGK } = settings;
-      if (!matchDuration || matchDuration<=0) return {error:null, players};
-
-      const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
-      const totalOutfield = outfieldSpots * matchDuration;
-
-      const candidates = players.filter(p => p.role!=='GK' && p.name.trim()!=='' && p.manualMinutes===null);
-      const manualLocked = players.filter(p => p.role!=='GK' && p.name.trim()!=='' && p.manualMinutes!==null);
-      const manualSum = manualLocked.reduce((s,p)=>s + Math.min(matchDuration, Math.max(0,p.manualMinutes)), 0);
-
-      const targetSum = candidates.reduce((s,p)=> s + Math.min(matchDuration, Math.max(0, p.targetMinutes||0)), 0);
-
-      if (manualSum + targetSum > totalOutfield) {
-        const err = `Manual minutes (${manualSum}) + target minimums (${targetSum}) exceed available outfield minutes (${totalOutfield}). Reduce targets or manual minutes.`;
-        return { error: err, players };
-      }
-
-      const baseMap = new Map(candidates.map(p => [p.id, Math.min(matchDuration, Math.max(0, p.targetMinutes||0))]));
-      let remaining = totalOutfield - manualSum - targetSum;
-
-      if (candidates.length>0 && remaining>0) {
-        const per = Math.floor(remaining / candidates.length);
-        let rem = remaining % candidates.length;
-        candidates.forEach(p=>{
-          baseMap.set(p.id, baseMap.get(p.id) + per + (rem>0?1:0));
-          if (rem>0) rem--;
+    <script type="text/babel">
+        const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
         });
-      }
 
-      const out = players.map(p=>{
-        if (p.role==='GK' && isPermanentGK) return {...p, minutes: matchDuration};
-        if (p.manualMinutes!==null) return {...p, minutes: Math.min(matchDuration, Math.max(0,p.manualMinutes))};
-        if (p.role!=='GK' && p.name.trim()!=='') return {...p, minutes: baseMap.get(p.id) || 0};
-        return {...p, minutes: 0};
-      });
-      return { error:null, players: out };
-    };
+        // Icons (emoji)
+        const User = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1rem', height: '1rem'}}>👤</span>;
+        const Settings = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.5rem', height: '1.5rem'}}>⚙️</span>;
+        const Play = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem'}}>▶️</span>;
+        const Save = ({ className = '', style = {}, color = 'currentColor' }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem', color}}>💾</span>;
+        const Unlock = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1rem', height: '1rem'}}>🔑</span>;
+        const Loader2 = ({ className = '', style = {} }) => <span className={`${className} animate-spin`} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem'}}>🔄</span>;
+        const Star = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1rem', height: '1rem'}}>⭐</span>;
+        const Download = ({ className = '', style = {} }) => <span className={className} style={{...style, display: 'inline-flex', alignItems: 'center', lineHeight: '1', width: '1.25rem', height: '1.25rem'}}>⬇️</span>;
 
-    const recommendSubs = (settings, squadCount) => {
-      const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
-      const benchCount = Math.max(0, squadCount - outfieldSpots - (settings.isPermanentGK ? 1 : 0));
-      let subInterval = 10, firstSubTime = 10, maxSubs = 2;
-      if (benchCount >= 4) { subInterval = 5; firstSubTime = 5; maxSubs = 3; }
-      else if (benchCount === 3) { subInterval = 8; firstSubTime = 8; maxSubs = 2; }
-      else if (benchCount <= 1) { subInterval = 15; firstSubTime = 10; maxSubs = 1; }
-      return { subInterval, firstSubTime, maxSubs, note: `Suggested for ${squadCount} players (${benchCount} bench).` };
-    };
+        const { useState, useEffect, useMemo, useCallback } = React;
+        
+        // --- MOCK FIREBASE (kept as-is) ---
+        window.__app_id = 'mock-app';
+        window.__firebase_config = JSON.stringify({ apiKey: "mock-key", authDomain: "mock-domain", projectId: "mock-project" });
+        window.__initial_auth_token = 'mock-token';
+        const mockDbData = new Map();
 
-    const priorityScore = (p) => (p.benchPriority==='High'? -2 : p.benchPriority==='Normal'? 0 : 2);
+        const retryFetch = async (apiCall) => apiCall();
 
-    const generateAutomaticPlan = (settings, playersWithMinutes) => {
-      const { gameFormat, matchDuration, selectedFormation, subInterval, firstSubTime, maxSubs, matchPeriods } = settings;
-      const positions = getOutfieldSlots(gameFormat, selectedFormation);
-      const outfieldSpots = positions.length;
-
-      const periods = (gameFormat==='5v5' && matchPeriods==='Quarters') ? 4 : 2;
-      const halfDuration = matchDuration/2;
-      const periodDuration = matchDuration/periods;
-
-      let rotationOutfield = playersWithMinutes
-        .filter(p => p.role!=='GK' && p.name.trim()!=='' && p.minutes>0 && p.minutes<matchDuration)
-        .sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes || a.name.localeCompare(b.name));
-
-      const gkPlayer = playersWithMinutes.find(p=>p.role==='GK');
-      const allPlayers = playersWithMinutes;
-
-      if (rotationOutfield.length <= outfieldSpots) {
-        return {
-          planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min)\n\nAll players can play their set minutes. No subs required for minutes management.`,
-          lineups: [{ time:'0:00 (Start)', players: allPlayers.map(p=>({...p, position: p.startingPosition || (p.role==='GK'?'GK':'Bench')})) }]
+        const getPrivatePath = (collectionName, userId) => {
+            const appId = window.__app_id || 'default-app-id';
+            return `mock_db:${appId}:${userId}:${collectionName}`;
         };
-      }
 
-      let plan = `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (Half: ${halfDuration} min)\n\n`;
-      plan += `GK: ${gkPlayer ? gkPlayer.name : 'Unassigned GK'}\n`;
-      plan += `Formation: ${selectedFormation} (${outfieldSpots} outfield slots)\n\n`;
+        const useFirebase = () => {
+            const [userId] = useState('mock-user-12345');
+            const [isAuthReady] = useState(true);
+            const [error] = useState(null);
 
-      let playing=[], bench=[], subCount=0, lineups=[];
+            const mockFirestore = useMemo(() => ({
+                collection: (path) => ({ path }),
+                query: (collectionRef) => ({ ...collectionRef }),
+                getDocs: async (q) => {
+                    const prefix = `${q.path}:`;
+                    const docs = Array.from(mockDbData.entries())
+                        .filter(([key]) => key.startsWith(prefix))
+                        .map(([key, value]) => ({
+                            id: key.split(':').pop(),
+                            data: () => value
+                        }));
+                    return { docs };
+                },
+                doc: (collectionRef, id = generateUUID()) => ({ path: collectionRef.path, id }),
+                setDoc: async (docRef, data) => { mockDbData.set(`${docRef.path}:${docRef.id}`, data); },
+                deleteDoc: async (docRef) => { mockDbData.delete(`${docRef.path}:${docRef.id}`); }
+            }), []);
 
-      const starters = playersWithMinutes.filter(p=> p.startingPosition && p.startingPosition!=='Bench' && p.role!=='GK' && p.name.trim()!=='');
-      if (starters.length === outfieldSpots) {
-        const starterMap = new Map();
-        starters.forEach(p=>{ const i=positions.indexOf(p.startingPosition); if (i!==-1) starterMap.set(i,p); });
-        playing = positions.map((_,i)=>starterMap.get(i)).filter(Boolean);
-        const ids = new Set(playing.map(p=>p.id));
-        bench = rotationOutfield.filter(p=>!ids.has(p.id));
-      } else {
-        const q=[...rotationOutfield];
-        playing = q.splice(0,outfieldSpots);
-        bench = q;
-      }
+            const firestorePath = useMemo(() => userId ? getPrivatePath('squads', userId) : null, [userId]);
+            return { db: mockFirestore, userId, isAuthReady, firestorePath, appId: window.__app_id, error };
+        };
 
-      lineups.push({
-        time:'0:00 (Start)',
-        players: allPlayers.map(p=>({...p, position: p.role==='GK' ? 'GK' : (playing.find(pl=>pl.id===p.id) ? positions[playing.findIndex(pl=>pl.id===p.id)] : 'Bench')}))
-      });
+        // --- CONSTANTS ---
+        const COLORS = { NAVY_BLUE:'#193755', ORANGE:'#E97227', SKY_BLUE:'#56B0D5', WHITE:'#FFFFFF', GOLD:'#AF9542' };
 
-      let currentPeriodMinutes = new Map([...playing, ...bench].map(p=>[p.id,0]));
-      plan += `--- STARTING LINEUP (0:00) ---\n`;
-      playing.forEach((p,i)=>{ plan += `${positions[i]}: ${p.name}\n`; });
-      plan += `\n`;
+        const MATCH_DURATIONS = { '5v5': 40, '7v7': 50, '9v9': 60, '11v11': 70 };
 
-      for (let period=1; period<=periods; period++) {
-        const periodStart=(period-1)*periodDuration, periodEnd=period*periodDuration;
-        let time=periodStart+firstSubTime, lastSub=periodStart;
+        const FORMATIONS = {
+            '5v5': [
+                { name: '1-2-1', slots: ['CD', 'CM-R', 'CM-L', 'ST'], maxPlayers: 4 },
+                { name: '2-1-1', slots: ['CD-R', 'CD-L', 'CM', 'ST'], maxPlayers: 4 },
+                { name: '1-1-2', slots: ['CD', 'CM', 'ST-R', 'ST-L'], maxPlayers: 4 },
+            ],
+            '7v7': [
+                { name: '2-1-3', slots: ['CD-R', 'CD-L', 'CM', 'ST-R', 'ST-L', 'ST'], maxPlayers: 6 },
+                { name: '2-2-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], maxPlayers: 6 },
+                { name: '1-3-2', slots: ['CD', 'CM-R', 'CM-L', 'CM', 'ST-R', 'ST-L'], maxPlayers: 6 },
+                { name: '2-3-1', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CM', 'ST'], maxPlayers: 6 },
+                { name: '1-2-3', slots: ['CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], maxPlayers: 6 },
+                { name: '1-4-1', slots: ['CD', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], maxPlayers: 6 },
+                /* NEW: tester formation */
+                { name: '3-2-1', slots: ['CD-R','CD','CD-L','CM-R','CM-L','ST'], maxPlayers: 6 },
+            ],
+            '9v9': [
+                { name: '3-2-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'ST'], maxPlayers: 8 },
+                { name: '3-3-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '3-4-1', slots: ['CD-R', 'CD-L', 'CD', 'RB', 'LB', 'CM', 'CDM', 'ST'], maxPlayers: 8 },
+                { name: '3-2-1-2', slots: ['CD-R', 'CD-L', 'CD', 'CDM-R', 'CDM-L', 'CAM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '2-4-2', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'CAM', 'ST-R', 'ST-L'], maxPlayers: 8 },
+                { name: '2-3-3', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'ST-R', 'ST-L', 'ST'], maxPlayers: 8 },
+                { name: '2-2-4', slots: ['CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], maxPlayers: 8 },
+            ],
+            '11v11': [
+                { name: '4-4-2', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'RW', 'LW', 'CM-R', 'CM-L', 'ST-R', 'ST-L'], maxPlayers: 10 },
+                { name: '4-3-3', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'CDM', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+                { name: '4-2-3-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM-R', 'CDM-L', 'RW', 'LW', 'CAM', 'ST'], maxPlayers: 10 },
+                { name: '4-1-4-1', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CDM', 'CM-R', 'CM-L', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+                { name: '4-2-4', slots: ['RB', 'LB', 'CD-R', 'CD-L', 'CM-R', 'CM-L', 'ST-R', 'ST-L', 'RW', 'LW'], maxPlayers: 10 },
+                { name: '3-5-2', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'ST-R', 'ST-L'], maxPlayers: 10 },
+                { name: '3-4-3', slots: ['CD-R', 'CD-L', 'CD', 'CM-R', 'CM-L', 'CDM', 'CAM', 'RW', 'LW', 'ST'], maxPlayers: 10 },
+            ],
+        };
 
-        if (period>1) {
-          const pname = periods===4 ? `QUARTER ${period}` : `SECOND HALF`;
-          plan += `\n*** ${pname} START (${periodStart}:00) - ROTATION RESET ***\n\n`;
-          const allR=[...playing, ...bench];
-          allR.sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes);
-          playing = allR.slice(0,outfieldSpots);
-          bench   = allR.slice(outfieldSpots);
+        const ALL_POSITIONS_AND_BENCH = [
+          'Bench', 'GK', 'CD', 'CD-R', 'CD-L', 'RB', 'LB', 'CM', 'CM-R', 'CM-L',
+          'CDM', 'CAM', 'RW', 'LW', 'ST', 'ST-R', 'ST-L'
+        ];
+        
+        // Helpers
+        const getOutfieldSlots = (gameFormat, selectedFormation) => {
+            const formatArray = FORMATIONS[gameFormat];
+            const formation = formatArray ? formatArray.find(f => f.name === selectedFormation) : null;
+            return formation ? formation.slots : [];
+        };
+        const getOutfieldMaxPlayers = (gameFormat) => {
+            const formatArray = FORMATIONS[gameFormat];
+            return formatArray && formatArray.length > 0 ? formatArray[0].maxPlayers : 0;
+        };
 
-          currentPeriodMinutes = new Map([...playing, ...bench].map(p=>[p.id,0]));
-          plan += `--- STARTING LINEUP (${periodStart}:00) ---\n`;
-          playing.forEach((p,i)=> plan += `${positions[i]}: ${p.name}\n`);
+        // Minutes calc (original behaviour)
+        const calculateEqualMinutes = (settings, players) => {
+          const { gameFormat, matchDuration, isPermanentGK } = settings;
+          if (!matchDuration || matchDuration <= 0 || players.length === 0) return players;
+          
+          const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
+          
+          const outfieldPlayersInRotation = players.filter(p => 
+                p.role !== 'GK' && 
+                p.name.trim() !== '' &&
+                p.minutes !== matchDuration 
+            );
+          const numOutfieldPlayers = outfieldPlayersInRotation.length;
+          if (numOutfieldPlayers === 0) return players;
+
+          const totalOutfieldMinutesAvailable = outfieldSpots * matchDuration;
+          const baseEqualTime = Math.floor(totalOutfieldMinutesAvailable / numOutfieldPlayers);
+          let remainderMinutes = totalOutfieldMinutesAvailable % numOutfieldPlayers;
+
+          const updatedPlayers = players.map((player) => {
+            if (player.role === 'GK' && isPermanentGK) return { ...player, minutes: matchDuration };
+            if (player.manualMinutes === matchDuration) return { ...player, minutes: matchDuration };
+            if (player.name.trim() === '') return { ...player, minutes: 0 };
+
+            if (player.role !== 'GK' && player.manualMinutes === null) {
+                let finalMinutes = baseEqualTime;
+                if (remainderMinutes > 0) { finalMinutes += 1; remainderMinutes--; }
+                return { ...player, minutes: finalMinutes };
+            }
+            return { ...player, minutes: player.manualMinutes !== null ? player.manualMinutes : (player.role === 'GK' && !isPermanentGK ? baseEqualTime : player.minutes) };
+          });
+
+          return updatedPlayers;
+        };
+
+        const generateAutomaticPlan = (settings, playersWithMinutes) => {
+          const { gameFormat, matchDuration, selectedFormation, subInterval, firstSubTime, maxSubs, matchPeriods } = settings;
+          const positions = getOutfieldSlots(gameFormat, selectedFormation);
+          const outfieldSpots = positions.length;
+
+          const periods = gameFormat === '5v5' && matchPeriods === 'Quarters' ? 4 : 2;
+          const halfDuration = matchDuration / 2;
+          const periodDuration = matchDuration / periods;
+
+          let allOutfieldPlayersInRotation = playersWithMinutes
+            .filter(p => p.role !== 'GK' && p.name.trim() !== '' && p.minutes > 0 && p.minutes < matchDuration)
+            .sort((a, b) => a.minutes - b.minutes);
+
+          const gkPlayer = playersWithMinutes.find(p => p.role === 'GK');
+          const allPlayers = playersWithMinutes;
+
+          if (allOutfieldPlayersInRotation.length <= outfieldSpots) {
+            return {
+                planText: `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (${periods} x ${periodDuration} min)\n\nAll ${allOutfieldPlayersInRotation.length + 1} players can play the full match duration or their manually set minutes. No substitutions required for minutes management.`,
+                lineups: [{ time: '0:00 (Start)', players: allPlayers.map(p => ({ ...p, position: p.startingPosition || (p.role === 'GK' ? 'GK' : 'Bench') })) }]
+            };
+          }
+
+          let plan = `--- Match Info ---\nFormat: ${gameFormat} (${matchPeriods})\nDuration: ${matchDuration} min (Half: ${halfDuration} min)\n\n`;
+          plan += `GK: ${gkPlayer ? gkPlayer.name : 'Unassigned GK'}\n`;
+          plan += `Formation: ${selectedFormation} (${outfieldSpots} outfield slots)\n\n`;
+          
+          let playing = [];
+          let bench = [];
+          let subCount = 0;
+          let lineups = []; 
+
+          const definedStarters = playersWithMinutes.filter(p => 
+              p.startingPosition && 
+              p.startingPosition !== 'Bench' && 
+              p.startingPosition !== 'GK' && 
+              p.name.trim() !== ''
+          );
+          if (definedStarters.length === outfieldSpots) {
+              let starterMap = new Map();
+              definedStarters.forEach(p => {
+                  const index = positions.indexOf(p.startingPosition);
+                  if (index !== -1) starterMap.set(index, p);
+              });
+              playing = positions.map((_, index) => starterMap.get(index)).filter(p => p);
+              const playingIDs = playing.map(p => p.id);
+              bench = allOutfieldPlayersInRotation.filter(p => !playingIDs.includes(p.id));
+          } else {
+              let rotationQueue = [...allOutfieldPlayersInRotation];
+              playing = rotationQueue.splice(0, outfieldSpots);
+              bench = rotationQueue;
+          }
+
+          lineups.push({ 
+              time: '0:00 (Start)', 
+              players: allPlayers.map(p => ({ 
+                  ...p, 
+                  position: p.role === 'GK' ? 'GK' : (playing.find(pl => pl.id === p.id) ? positions[playing.findIndex(pl => pl.id === p.id)] : 'Bench') 
+              }))
+          });
+
+          let playersInRotation = [...playing, ...bench];
+          let currentPeriodMinutes = new Map(playersInRotation.map(p => [p.id, 0]));
+
+          plan += `--- STARTING LINEUP (0:00) ---\n`;
+          playing.forEach((p, i) => { plan += `${positions[i]}: ${p.name}\n`; });
           plan += `\n`;
 
-          lineups.push({
-            time:`${periodStart}:00 (${pname})`,
-            players: allPlayers.map(p=>({...p, position: p.role==='GK' ? 'GK' : (playing.find(pl=>pl.id===p.id) ? positions[playing.findIndex(pl=>pl.id===p.id)] : 'Bench')}))
-          });
+          for (let period = 1; period <= periods; period++) {
+            const periodStart = (period - 1) * periodDuration;
+            const periodEnd = period * periodDuration;
+            let time = periodStart + firstSubTime;
+            let lastSubTime = periodStart;
+            
+            if (period > 1) {
+                const periodName = periods === 4 ? `QUARTER ${period}` : `SECOND HALF`;
+                plan += `\n*** ${periodName} START (${periodStart}:00) - ROTATION RESET FOR EVEN MINUTES ***\n\n`;
+                const allPlayersInRotation = [...playing, ...bench];
+                let newPlaying = allPlayersInRotation.filter(p => bench.map(b => b.id).includes(p.id)).slice(0, outfieldSpots);
+                let newBench = allPlayersInRotation.filter(p => !newPlaying.map(np => np.id).includes(p.id));
+                playing = newPlaying; bench = newBench;
+                currentPeriodMinutes.forEach((v, k) => currentPeriodMinutes.set(k, 0));
+                plan += `--- STARTING LINEUP (${periodStart}:00) ---\n`;
+                playing.forEach((p, i) => { plan += `${positions[i]}: ${p.name}\n`; });
+                plan += `\n`;
+                lineups.push({ 
+                    time: `${periodStart}:00 (${periodName})`, 
+                    players: allPlayers.map(p => ({ 
+                        ...p, 
+                        position: p.role === 'GK' ? 'GK' : (playing.find(pl => pl.id === p.id) ? positions[playing.findIndex(pl => pl.id === p.id)] : 'Bench') 
+                    }))
+                });
+                time = periodStart + firstSubTime; lastSubTime = periodStart;
+            }
 
-          time=periodStart+firstSubTime; lastSub=periodStart;
-        }
+            while (time <= periodEnd && bench.length > 0) {
+              const elapsed = time - lastSubTime;
+              const outgoingCandidates = [];
+              playing.forEach((player, index) => {
+                  currentPeriodMinutes.set(player.id, (currentPeriodMinutes.get(player.id) || 0) + elapsed); 
+                  outgoingCandidates.push({ player, position: positions[index], index, periodTimePlayed: currentPeriodMinutes.get(player.id) });
+              });
+              outgoingCandidates.sort((a, b) => b.periodTimePlayed - a.periodTimePlayed);
+              const subsForThisWindow = Math.min(maxSubs, bench.length);
+              const subsBlock = [];
+              let playersToSubOut = [];
+              let benchClone = [...bench];
+              for (let i = 0; i < subsForThisWindow; i++) {
+                  if (outgoingCandidates.length === 0) break;
+                  const outgoing = outgoingCandidates.shift(); 
+                  playersToSubOut.push(outgoing);
+              }
+              playersToSubOut.forEach((outgoing) => {
+                  const position = outgoing.position;
+                  let incoming = benchClone.find(p => p.preferredPosition === position) || benchClone.find(p => p.secondaryPosition === position) || benchClone[0];
+                  if (!incoming) return;
+                  benchClone = benchClone.filter(p => p.id !== incoming.id);
+                  bench = bench.filter(p => p.id !== incoming.id);
+                  playing[outgoing.index] = incoming;
+                  subsBlock.push({ on: incoming, off: outgoing.player, position, index: outgoing.index });
+                  bench.push(outgoing.player);
+              });
 
-        while (time<=periodEnd && bench.length>0) {
-          const elapsed = time-lastSub;
-          const outgoing = [];
-          playing.forEach((pl,idx)=>{
-            currentPeriodMinutes.set(pl.id, (currentPeriodMinutes.get(pl.id)||0) + elapsed);
-            outgoing.push({player:pl, index:idx, position:positions[idx], periodTime: currentPeriodMinutes.get(pl.id)});
-          });
-          outgoing.sort((a,b)=> b.periodTime - a.periodTime);
-
-          const n = Math.min(maxSubs, bench.length);
-          const subsBlock = [];
-          let benchOrdered = [...bench].sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes || a.name.localeCompare(b.name));
-
-          for (let i=0;i<n;i++){
-            if (!outgoing.length || !benchOrdered.length) break;
-            const out = outgoing.shift();
-
-            let idx = benchOrdered.findIndex(p=>p.preferredPosition===out.position);
-            if (idx===-1) idx = benchOrdered.findIndex(p=>p.secondaryPosition===out.position);
-            if (idx===-1) idx = 0;
-
-            const incoming = benchOrdered.splice(idx,1)[0];
-            playing[out.index] = incoming;
-            subsBlock.push({on:incoming, off:out.player, position:out.position});
-            bench = bench.filter(p=>p.id!==incoming.id);
-            bench.push(out.player);
+              if (subsBlock.length > 0) {
+                  subCount += subsBlock.length;
+                  plan += `--- Substitution at ${String(time).padStart(2, '0')}:00 ---\n`;
+                  subsBlock.forEach(sub => { plan += `ON: ${sub.on.name} (${sub.position} slot) | OFF: ${sub.off.name}\n`; });
+                  plan += `\n`;
+                lineups.push({ 
+                    time: `${String(time).padStart(2, '0')}:00 (Sub)`, 
+                    players: allPlayers.map(p => ({ 
+                        ...p, 
+                        position: p.role === 'GK' ? 'GK' : (playing.find(pl => pl.id === p.id) ? positions[playing.findIndex(pl => pl.id === p.id)] : 'Bench') 
+                    }))
+                });
+              }
+              lastSubTime = time;
+              time += subInterval;
+              if (time > periodEnd) break;
+            }
           }
 
-          if (subsBlock.length){
-            subCount += subsBlock.length;
-            plan += `--- Substitution at ${String(time).padStart(2,'0')}:00 ---\n`;
-            subsBlock.forEach(s=> plan += `ON: ${s.on.name} (${s.position} slot) | OFF: ${s.off.name}\n`);
-            plan += `\n`;
-            lineups.push({
-              time:`${String(time).padStart(2,'0')}:00 (Sub)`,
-              players: allPlayers.map(p=>({...p, position: p.role==='GK' ? 'GK' : (playing.find(pl=>pl.id===p.id) ? positions[playing.findIndex(pl=>pl.id===p.id)] : 'Bench')}))
-            });
-          }
-          lastSub=time; time += subInterval;
-        }
-      }
+          plan += `--- Match End (${matchDuration}:00) ---\n`;
+          plan += `Total substitutions made: ${subCount}. \n\n`;
+          plan += '***Note: Equal minutes with halftime reset.***';
 
-      plan += `--- Match End (${matchDuration}:00) ---\nTotal substitutions made: ${subCount}.\n\n`;
-      plan += '***Note: Priority and targets are respected where possible; half/quarter resets help spread minutes.***';
-      return { planText: plan, lineups };
-    };
-
-    const handleDownloadPlan = (matchPlan, settings, players) => {
-      const res = calculateMinutesWithTargets(settings, players);
-      const playersWithMinutes = res.players || players;
-
-      let csv = "data:text/csv;charset=utf-8,";
-      csv += "Time,On Player,Off Player,Position,Notes\n";
-      let t=0;
-      matchPlan.split('\n').forEach(line=>{
-        if (line.startsWith('--- Substitution at')){
-          const m=line.match(/Substitution at (\d+):00/); if (m) t=m[1];
-        } else if (line.startsWith('ON:')){
-          const m=line.match(/ON: (.+?) \((.+?) slot\) \| OFF: (.+)/);
-          if (m){ const [,on,pos,off]=m; csv += `${t},"${on}","${off}","${pos}",""\n`; }
-        }
-      });
-      csv += "\nPlayer,Role,Target,Minutes,Manual_Override,Priority\n";
-      playersWithMinutes.filter(p=>p.name.trim()!=='').sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
-        const manual = p.manualMinutes!==null ? 'Yes':'No';
-        csv += `"${p.name}","${p.role}",${p.targetMinutes||0},${p.minutes||0},${manual},${p.benchPriority||'Normal'}\n`;
-      });
-      const a = document.createElement('a');
-      a.href = encodeURI(csv);
-      a.download = `MatchPlan_${settings.gameFormat}_${new Date().toISOString().slice(0,10)}.csv`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    };
-
-    const copyToClipboard = async (text) => {
-      try { await navigator.clipboard.writeText(text); alert('Plan copied to clipboard!'); }
-      catch { alert('Copy failed—select the text and copy manually.'); }
-    };
-
-    const Button = ({children, color=COLORS.ORANGE, disabled, onClick, className=''}) => (
-      <button onClick={onClick} disabled={disabled}
-        className={`flex items-center justify-center px-6 py-3 rounded-xl font-bold text-white shadow-lg transition ${disabled?'opacity-50 cursor-not-allowed bg-gray-400':'hover:opacity-90 active:scale-[0.98]'} ${className}`}
-        style={{backgroundColor: color}}
-      >{children}</button>
-    );
-
-    const SubscriptionBadge = ({tier})=>{
-      let color=COLORS.NAVY_BLUE, icon=null, text='Basic (FREE)';
-      if (tier==='Championship'){ color=COLORS.SKY_BLUE; icon=<Unlock className="mr-1" />; text='Championship'; }
-      if (tier==='Premiership'){ color=COLORS.GOLD; icon=<Star className="mr-1" />; text='Premiership'; }
-      return (
-        <div className="px-3 py-1 rounded-full text-xs font-bold flex items-center shadow-md" style={{backgroundColor:color, color:COLORS.WHITE}}>
-          {icon}{text}
-        </div>
-      );
-    };
-
-    const PlayerInputRow = ({ player, index, settings, setPlayers, subscriptionTier }) => {
-      const isChampionshipPlus = subscriptionTier !== 'Basic';
-      const isPremiership = subscriptionTier === 'Premiership';
-
-      const currentFormationSlots = useMemo(()=>{
-        const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
-        return ['Bench','GK', ...slots].filter((v,i,a)=>a.indexOf(v)===i);
-      }, [settings.gameFormat, settings.selectedFormation]);
-
-      const handleChange = (field, value) => {
-        setPlayers(prev => prev.map(p=>{
-          if (p.id!==player.id) return p;
-          let updated = {...p, [field]: value};
-
-          if (field==='startingPosition' && value!=='' && value!=='Bench'){ updated.preferredPosition = value; }
-          if (updated.preferredPosition==='GK'){ updated.role='GK'; }
-          else if (p.role==='GK' && updated.preferredPosition!=='GK'){ updated.role='Outfield'; }
-          else if (p.role!=='Outfield' && updated.preferredPosition!=='GK'){ updated.role='Outfield'; }
-          if (index!==0 && field==='startingPosition' && value==='GK'){ updated.startingPosition='Bench'; }
-          return updated;
-        }));
-      };
-
-      return (
-        <div className="grid grid-cols-12 items-center gap-2 py-2 border-b border-gray-100">
-          <span className="col-span-1 text-xs font-semibold text-center text-gray-500">{index+1}</span>
-          <input className="col-span-3 p-2 border rounded-lg" placeholder={`Player ${index+1}`} value={player.name}
-                 onChange={e=>handleChange('name', e.target.value)} />
-          <select className="col-span-2 p-2 border rounded-lg text-sm bg-white" value={player.startingPosition||''}
-                  onChange={e=>handleChange('startingPosition', e.target.value)}>
-            <option value="">Start Pos.</option>
-            {currentFormationSlots.filter(pos=> index===0 ? true : pos!=='GK').map(pos=><option key={`start-${pos}`} value={pos}>{pos}</option>)}
-          </select>
-          <select className="col-span-2 p-2 border rounded-lg text-sm bg-white" value={player.preferredPosition}
-                  onChange={e=>handleChange('preferredPosition', e.target.value)}>
-            <option value="">Pref. Pos.</option>
-            {currentFormationSlots.filter(p=>p!=='Bench').map(pos=><option key={`pref-${pos}`} value={pos}>{pos}</option>)}
-          </select>
-
-          {isChampionshipPlus && (
-            <>
-              <select className="col-span-2 p-2 border rounded-lg text-sm bg-white" value={player.secondaryPosition}
-                      onChange={e=>handleChange('secondaryPosition', e.target.value)}>
-                <option value="">Sec. Pos.</option>
-                {currentFormationSlots.filter(p=>p!=='Bench').map(pos=><option key={`sec-${pos}`} value={pos}>{pos}</option>)}
-              </select>
-              <select className="col-span-2 p-2 border rounded-lg text-sm bg-white" value={player.benchPriority || 'Normal'}
-                      onChange={e=>handleChange('benchPriority', e.target.value)}>
-                <option>High</option>
-                <option>Normal</option>
-                <option>Low</option>
-              </select>
-              <input className="col-span-2 p-2 border rounded-lg text-sm text-center" type="number" min="0"
-                     placeholder="Target mins" value={player.targetMinutes ?? ''} 
-                     onChange={e=>handleChange('targetMinutes', e.target.value===''?null:Number(e.target.value))} />
-              <input className="col-span-2 p-2 border rounded-lg text-sm text-center" type="number" min="0"
-                     placeholder="Manual mins" value={player.manualMinutes ?? ''} 
-                     onChange={e=>handleChange('manualMinutes', e.target.value===''?null:Number(e.target.value))} />
-            </>
-          )}
-        </div>
-      );
-    };
-
-    const PlayerCircle = ({ name, position, isGK, color, yPos, xPos, draggable, onDragStart, onClick }) => {
-      const firstName = (name||'').split(' ')[0] || '';
-      return (
-        <div className="absolute flex flex-col items-center justify-center transition-all duration-200 ease-in-out"
-             style={{top:`${yPos}%`, left:`${xPos}%`, transform:'translate(-50%,-50%)', zIndex:Math.round(yPos)}}
-             draggable={draggable} onDragStart={onDragStart} onClick={onClick}>
-          <div className="relative w-12 h-12 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-lg border-2"
-               style={{backgroundColor:color, borderColor:isGK?COLORS.ORANGE:color}}>
-            {firstName || '—'}
-            <span className="pos-badge">{position || '—'}</span>
-          </div>
-        </div>
-      );
-    };
-
-    const PositionVisualizer = ({
-      settings, lineups, currentLineupIndex, isPremiership,
-      isAssignMode, displayedPlayers, setPlayers, selectedForTap, setSelectedForTap
-    }) => {
-      const displayLineup = lineups[currentLineupIndex] || { players:[], time:'N/A' };
-
-      const coords = (pos)=>{
-        const map = {
-          GK:{y:95,x:50}, RB:{y:80,x:15}, LB:{y:80,x:85},
-          CD:{y:85,x:50}, 'CD-R':{y:85,x:30}, 'CD-L':{y:85,x:70},
-          CDM:{y:70,x:50}, 'CDM-R':{y:70,x:25}, 'CDM-L':{y:70,x:75},
-          CM:{y:50,x:50}, 'CM-R':{y:50,x:20}, 'CM-L':{y:50,x:80},
-          CAM:{y:35,x:50}, RW:{y:20,x:10}, LW:{y:20,x:90},
-          ST:{y:15,x:50}, 'ST-R':{y:18,x:30}, 'ST-L':{y:18,x:70},
+          return { planText: plan, lineups };
         };
-        return map[pos] || {y:50,x:50};
-      };
 
-      const assignPlayerToPos = (playerId, pos) => {
-        setPlayers(prev => prev.map(p=>{
-          if (p.id!==playerId) return p;
-          if (pos==='GK' && p.role!=='GK') return {...p, startingPosition:'Bench'};
-          return {...p, startingPosition: pos, preferredPosition: pos};
-        }));
-      };
+        const handleDownloadPlan = (matchPlan, settings, players) => {
+            const playersWithMinutes = calculateEqualMinutes(settings, players);
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Time,On Player,Off Player,Position,Notes\n";
+            const planLines = matchPlan.split('\n');
+            let time = 0;
+            planLines.forEach(line => {
+                if (line.startsWith('--- Substitution at')) {
+                    const match = line.match(/Substitution at (\d+):00/);
+                    if (match) time = match[1];
+                } else if (line.startsWith('ON:')) {
+                    const match = line.match(/ON: (.+?) \((.+?) slot\) \| OFF: (.+)/);
+                    if (match) {
+                        const [, onPlayer, position, offPlayer] = match;
+                        csvContent += `${time},"${onPlayer}","${offPlayer}","${position}",""\n`;
+                    }
+                }
+            });
+            csvContent += "\nPlayer,Role,Minutes,Manual_Override\n";
+            playersWithMinutes
+                .filter(p => p.name.trim() !== '')
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(p => {
+                    const role = p.role;
+                    const manual = p.manualMinutes !== null ? 'Yes' : 'No';
+                    csvContent += `"${p.name}","${role}",${p.minutes},${manual}\n`;
+                });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `MatchPlan_${settings.gameFormat}_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
 
-      const onDragStart = (id) => (e)=> { e.dataTransfer.setData('text/plain', id); };
-      const onDragOver = (e)=> { e.preventDefault(); e.currentTarget.classList.add('dragover'); };
-      const onDragLeave = (e)=> { e.currentTarget.classList.remove('dragover'); };
-      const onDrop = (pos) => (e)=> {
-        e.preventDefault();
-        e.currentTarget.classList.remove('dragover');
-        const id = e.dataTransfer.getData('text/plain');
-        if (!id) return;
-        assignPlayerToPos(id, pos);
-      };
+        // UI bits
+        const PlayerInputRow = ({ player, index, settings, setPlayers, subscriptionTier }) => {
+          const isChampionship = subscriptionTier !== 'Basic';
+          const isPremiership = subscriptionTier === 'Premiership';
+          const currentFormationSlots = useMemo(() => {
+            const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+            return ['Bench', 'GK', ...slots].filter((v, i, a) => a.indexOf(v) === i); 
+          }, [settings.gameFormat, settings.selectedFormation]);
 
-      const positions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
-
-      const currentPosMap = new Map();
-      (displayLineup.players || []).forEach(pl => {
-        if (pl.position && pl.position!=='Bench') currentPosMap.set(pl.position, pl);
-      });
-
-      const slotBubbles = positions.map(pos=>{
-        const {y,x} = coords(pos);
-        let occupantName = '';
-        if (isAssignMode) {
-          const rosterOccupant = displayedPlayers.find(p=>p.startingPosition===pos && p.role!=='GK');
-          occupantName = rosterOccupant ? (rosterOccupant.name||'').split(' ')[0] : '';
-        } else {
-          const live = currentPosMap.get(pos);
-          occupantName = live ? (live.name||'').split(' ')[0] : '';
-        }
-
-        return (
-          <div key={pos}
-               className={`absolute drop-slot ${isAssignMode?'cursor-pointer':''}`}
-               onDragOver={isAssignMode? onDragOver: undefined}
-               onDragLeave={isAssignMode? onDragLeave: undefined}
-               onDrop={isAssignMode? onDrop(pos) : undefined}
-               onClick={isAssignMode && selectedForTap ? ()=>{ assignPlayerToPos(selectedForTap, pos); setSelectedForTap(null);} : undefined}
-               style={{top:`${y}%`, left:`${x}%`, transform:'translate(-50%,-50%)'}}>
-            <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-white"
-                 style={{backgroundColor: occupantName ? 'rgba(86,176,213,.9)' : 'rgba(255,255,255,.12)', borderColor:'#ffffff'}}>
-              {pos}
-            </div>
-            {occupantName && (
-              <div className="text-[10px] mt-1 text-center font-medium" style={{color:'#fff', textShadow:'0 1px 2px rgba(0,0,0,.35)'}}>
-                {occupantName}
-              </div>
-            )}
-          </div>
-        );
-      });
-
-      const gk = isAssignMode
-        ? displayedPlayers.find(p=>p.role==='GK')
-        : (displayLineup.players || []).find(p=>p.position==='GK');
-      const gkC = coords('GK');
-
-      const visualPlayers = (displayLineup.players || [])
-        .filter(p=>p.position && p.position!=='Bench' && (p.name||'').trim()!=='')
-        .map(p=>{
-          const c = coords(p.position);
-          const isGK = p.position==='GK';
+          const handleChange = (field, value) => {
+            setPlayers(prev => prev.map(p => {
+                if (p.id !== player.id) return p;
+                let updated = { ...p, [field]: value };
+                if (field === 'startingPosition' && value !== '' && value !== 'Bench') {
+                    updated.preferredPosition = value;
+                }
+                if (updated.preferredPosition === 'GK') updated.role = 'GK';
+                else if (p.role === 'GK' && updated.preferredPosition !== 'GK') updated.role = 'Outfield';
+                else if (p.role !== 'Outfield' && updated.preferredPosition !== 'GK') updated.role = 'Outfield';
+                if (index !== 0 && field === 'startingPosition' && value === 'GK') updated.startingPosition = 'Bench';
+                return updated;
+            }));
+          };
+            
           return (
-            <PlayerCircle key={p.id} name={p.name} position={p.position} isGK={isGK}
-                          color={isGK?COLORS.NAVY_BLUE:COLORS.SKY_BLUE} yPos={c.y} xPos={c.x}
-                          draggable={isAssignMode}
-                          onDragStart={isAssignMode? onDragStart(p.id): undefined}
-                          onClick={isAssignMode? ()=> setSelectedForTap(p.id) : undefined}
-            />
+            <div className="flex items-center space-x-2 py-2 border-b border-gray-100">
+              <span className="text-xs font-semibold w-6 text-center text-gray-500">{index + 1}</span>
+              <input type="text" placeholder={`Player Name ${index + 1}`} value={player.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                className="flex-grow p-2 border rounded-lg" />
+                <select value={player.startingPosition || ''} onChange={(e) => handleChange('startingPosition', e.target.value)}
+                    className="p-2 border rounded-lg w-28 text-sm bg-white">
+                    <option value="">Start Pos.</option>
+                    {currentFormationSlots.filter(p => index === 0 ? true : p !== 'GK').map(pos => <option key={`start-${pos}`} value={pos}>{pos}</option>)}
+                </select>
+              <select value={player.preferredPosition} onChange={(e) => handleChange('preferredPosition', e.target.value)}
+                className="p-2 border rounded-lg w-28 text-sm bg-white">
+                <option value="">Pref. Pos.</option>
+                {currentFormationSlots.filter(p => p !== 'Bench').map(pos => <option key={`pref-${pos}`} value={pos}>{pos}</option>)}
+              </select>
+              {isChampionship && (
+                <select value={player.secondaryPosition} onChange={(e) => handleChange('secondaryPosition', e.target.value)}
+                  className="p-2 border rounded-lg w-28 text-sm bg-white">
+                  <option value="">Sec. Pos.</option>
+                  {currentFormationSlots.filter(p => p !== 'Bench').map(pos => <option key={`sec-${pos}`} value={pos}>{pos}</option>)}
+                </select>
+              )}
+              {isPremiership && (
+                <input type="number" placeholder="Manual Mins"
+                  value={player.manualMinutes === null ? '' : player.manualMinutes}
+                  onChange={(e) => handleChange('manualMinutes', e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                  className="p-2 border rounded-lg w-24 text-sm text-center" />
+              )}
+            </div>
           );
-        });
+        };
 
-      const showGenerateHint = !isAssignMode && (!lineups || lineups.length <= 1);
-
-      return (
-        <div className="relative w-full h-96 border-4 border-green-800 bg-green-700/80 rounded-xl overflow-hidden shadow-inner">
-          <div className="absolute inset-0 border-white border-2 m-4 rounded-lg opacity-80">
-            <div className="absolute top-1/2 left-1/2 w-20 h-20 border-white border-2 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
-            <div className="absolute top-0 left-1/2 w-40 h-10 border-white border-2 -translate-x-1/2"></div>
-            <div className="absolute bottom-0 left-1/2 w-40 h-10 border-white border-2 -translate-x-1/2 -scale-y-100"></div>
-          </div>
-
-          {/* GK */}
-          <div className={`absolute ${isAssignMode?'drop-slot':''}`} style={{top:`${gkC.y}%`, left:`${gkC.x}%`, transform:'translate(-50%,-50%)' }}
-               onDragOver={isAssignMode? onDragOver: undefined}
-               onDragLeave={isAssignMode? onDragLeave: undefined}
-               onDrop={isAssignMode? onDrop('GK') : undefined}
-               onClick={isAssignMode && selectedForTap ? ()=>{ assignPlayerToPos(selectedForTap, 'GK'); setSelectedForTap(null);} : undefined}
-          >
-            <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-white"
-                 style={{backgroundColor: gk ? COLORS.NAVY_BLUE : 'rgba(255,255,255,.12)', borderColor:'#ffffff'}}>
-              GK
-            </div>
-            {gk && <div className="text-[10px] mt-1 text-center font-medium" style={{color:'#fff'}}>{(gk.name||'').split(' ')[0]}</div>}
-          </div>
-
-          {/* outfield slots */}
-          {slotBubbles}
-
-          {/* player bubbles from current lineup */}
-          {visualPlayers}
-
-          <div className="absolute bottom-2 right-2 text-xs font-semibold text-white bg-black/50 px-2 py-1 rounded">
-            {settings.gameFormat} - {settings.selectedFormation} ({displayLineup.time})
-          </div>
-          {isAssignMode && (
-            <div className="absolute top-2 left-2 text-[11px] font-semibold text-white bg-black/50 px-2 py-1 rounded flex items-center gap-2">
-              <DragI/> Drag a player bubble or <TapI/> tap a player then tap a slot
-            </div>
-          )}
-          {showGenerateHint && (
-            <div className="absolute inset-x-0 bottom-3 mx-auto w-fit text-[11px] font-semibold text-white bg-black/50 px-3 py-1 rounded">
-              Generate a plan to activate the live timeline view
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    const SubstitutionTimeline = ({ lineups, currentLineupIndex, setCurrentLineupIndex }) => {
-      if (lineups.length<=1) return null;
-      const maxIndex = lineups.length-1;
-      return (
-        <div className="mt-4 flex items-center space-x-2 p-2 bg-gray-100 rounded-lg border-t border-b" style={{borderColor:COLORS.SKY_BLUE}}>
-          <span className="font-semibold text-sm" style={{color:COLORS.NAVY_BLUE}}>View Lineup:</span>
-          <button onClick={()=>setCurrentLineupIndex(Math.max(0,currentLineupIndex-1))} disabled={currentLineupIndex===0}
-                  className="p-1 px-3 text-sm bg-gray-300 rounded disabled:opacity-50">&lt; Prev</button>
-          <div className="flex-grow text-center font-mono text-sm font-bold" style={{color:COLORS.ORANGE}}>
-            {lineups[currentLineupIndex].time} (Event {currentLineupIndex+1} of {lineups.length})
-          </div>
-          <button onClick={()=>setCurrentLineupIndex(Math.min(maxIndex,currentLineupIndex+1))} disabled={currentLineupIndex===maxIndex}
-                  className="p-1 px-3 text-sm bg-gray-300 rounded disabled:opacity-50">Next &gt;</button>
-        </div>
-      );
-    };
-
-    const ComplianceTable = ({ players }) => {
-      const rows = players.filter(p=>p.name.trim()!=='').map(p=>{
-        const target = p.targetMinutes || 0;
-        const mins = p.minutes || 0;
-        const delta = mins - target;
-        return {...p, target, mins, delta};
-      });
-      if (!rows.length) return null;
-      return (
-        <div className="mt-4 p-3 bg-white border rounded-lg" style={{borderColor:COLORS.SKY_BLUE}}>
-          <div className="font-bold mb-2" style={{color:COLORS.NAVY_BLUE}}>Target Minutes Compliance</div>
-          <div className="grid grid-cols-12 text-xs font-semibold border-b pb-1" style={{color:COLORS.NAVY_BLUE}}>
-            <div className="col-span-5">Player</div>
-            <div className="col-span-2 text-right">Target</div>
-            <div className="col-span-2 text-right">Assigned</div>
-            <div className="col-span-3 text-right">Δ (Assigned-Target)</div>
-          </div>
-          {rows.sort((a,b)=>a.name.localeCompare(b.name)).map(r=>{
-            const ok = r.delta>=0;
+        const PlayerCircle = ({ name, position, isGK, color, yPos, xPos }) => {
+            const displayPos = position.length > 4 ? position.replace('-', '/') : position;
+            const firstName = name.split(' ')[0];
             return (
-              <div key={r.id} className="grid grid-cols-12 py-1 text-sm border-b last:border-b-0">
-                <div className="col-span-5">{r.name}</div>
-                <div className="col-span-2 text-right">{r.target}</div>
-                <div className="col-span-2 text-right">{r.mins}</div>
-                <div className={`col-span-3 text-right font-semibold ${ok?'text-green-600':'text-red-600'}`}>{r.delta}</div>
+          <div className="absolute flex flex-col items-center justify-center transition-all duration-500 ease-in-out"
+            style={{ top: `${yPos}%`, left: `${xPos}%`, transform: 'translate(-50%, -50%)', zIndex: Math.round(yPos) }}
+            title={`${name} (${position})`}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg border-2"
+              style={{ backgroundColor: color, borderColor: isGK ? COLORS.ORANGE : color }}>
+              {firstName || '—'}
+            </div>
+            <span className="text-xs mt-1 font-medium text-center" style={{ color: COLORS.NAVY_BLUE }}>{displayPos || 'POS'}</span>
+          </div>
+        )};
+
+        const PositionVisualizer = ({ settings, lineups, currentLineupIndex, isPremiership }) => {
+          const { gameFormat, selectedFormation } = settings;
+          const displayLineup = lineups[currentLineupIndex] || { players: [], time: 'N/A' };
+          const playersOnField = displayLineup.players.filter(p => p.position !== 'Bench' && p.name.trim() !== '');
+
+          // UPDATED: moved defenders up (away from GK)
+          const getPositionCoordinates = (position) => {
+            const map = {
+                GK: { y: 95, x: 50 },
+                RB: { y: 76, x: 15 }, LB: { y: 76, x: 85 },          /* was 80 */
+                CD: { y: 82, x: 50 }, 'CD-R': { y: 80, x: 30 }, 'CD-L': { y: 80, x: 70 }, /* was 85,85,85 */
+                CDM: { y: 70, x: 50 }, 'CDM-R': { y: 70, x: 25 }, 'CDM-L': { y: 70, x: 75 },
+                CM: { y: 50, x: 50 }, 'CM-R': { y: 50, x: 20 }, 'CM-L': { y: 50, x: 80 },
+                CAM: { y: 35, x: 50 },
+                RW: { y: 20, x: 10 }, LW: { y: 20, x: 90 },
+                ST: { y: 15, x: 50 }, 'ST-R': { y: 18, x: 30 }, 'ST-L': { y: 18, x: 70 },
+            };
+            return map[position] || { y: 50, x: 50 };
+          };
+
+          const visualPlayers = playersOnField.map((player) => {
+            const { y, x } = getPositionCoordinates(player.position);
+            const isGK = player.position === 'GK';
+            const color = isGK ? COLORS.NAVY_BLUE : COLORS.SKY_BLUE;
+            return <PlayerCircle key={player.id} name={player.name} position={player.position} isGK={isGK} color={color} yPos={y} xPos={x} />;
+          });
+
+          if (!isPremiership && currentLineupIndex > 0 && lineups.length > 1) {
+            return (
+                <div className="flex items-center justify-center w-full h-96 border-4 border-dashed rounded-xl" style={{ borderColor: COLORS.GOLD, color: COLORS.GOLD }}>
+                    <div className="text-center p-4">
+                        <Star className="w-10 h-10 mx-auto fill-current mb-2" />
+                        <p className="font-bold text-lg">Visual Timeline (Premiership Only)</p>
+                        <p className="text-sm mt-1">Upgrade to view and step through the full match substitution sequence.</p>
+                    </div>
+                </div>
+            )
+          }
+
+          return (
+            <div className="relative w-full h-96 border-4 border-green-800 bg-green-700/80 rounded-xl overflow-hidden shadow-inner">
+              <div className="absolute inset-0 border-white border-2 m-4 rounded-lg opacity-80">
+                <div className="absolute top-1/2 left-1/2 w-20 h-20 border-white border-2 rounded-full transform -translate-x-1/2 -translate-y-1/2 opacity-80"></div>
+                <div className="absolute top-0 left-1/2 w-40 h-10 border-white border-2 transform -translate-x-1/2"></div>
+                <div className="absolute bottom-0 left-1/2 w-40 h-10 border-white border-2 transform -translate-x-1/2 -scale-y-100"></div>
+              </div>
+
+              {visualPlayers}
+
+              <div className="absolute bottom-2 right-2 text-xs font-semibold text-white bg-black/50 p-1 rounded">
+                {settings.gameFormat} - {selectedFormation} ({displayLineup.time})
+              </div>
+            </div>
+          );
+        };
+        
+        const SubscriptionBadge = ({ tier }) => {
+          let color, icon, text;
+          if (tier === 'Premiership') { color = COLORS.GOLD; icon = <Star className="w-4 h-4 text-white fill-current mr-1" />; text = 'Premiership'; }
+          else if (tier === 'Championship') { color = COLORS.SKY_BLUE; icon = <Unlock className="w-4 h-4 text-white mr-1" />; text = 'Championship'; }
+          else { color = COLORS.NAVY_BLUE; icon = null; text = 'Basic (FREE)'; }
+          return (
+            <div className="px-3 py-1 rounded-full text-xs font-bold flex items-center shadow-md" style={{ backgroundColor: color, color: COLORS.WHITE }}>
+              {icon}{text}
+            </div>
+          );
+        };
+
+        const Button = ({ children, color = COLORS.ORANGE, disabled, onClick }) => (
+          <button onClick={onClick} disabled={disabled}
+            className={`flex items-center justify-center px-6 py-3 rounded-xl font-bold text-white shadow-lg transition duration-200 ${disabled? 'opacity-50 cursor-not-allowed bg-gray-400':'hover:opacity-90 active:scale-[0.98]'}`}
+            style={{ backgroundColor: color }}>
+            {children}
+          </button>
+        );
+
+        const SubstitutionTimeline = ({ lineups, currentLineupIndex, setCurrentLineupIndex }) => {
+            if (lineups.length <= 1) return null;
+            const maxIndex = lineups.length - 1;
+            return (
+                <div className="mt-4 flex items-center space-x-2 p-2 bg-gray-100 rounded-lg border-t border-b" style={{ borderColor: COLORS.SKY_BLUE }}>
+                    <span className="font-semibold text-sm" style={{ color: COLORS.NAVY_BLUE }}>View Lineup:</span>
+                    <button onClick={() => setCurrentLineupIndex(Math.max(0, currentLineupIndex - 1))}
+                        disabled={currentLineupIndex === 0}
+                        className="p-1 px-3 text-sm bg-gray-300 rounded disabled:opacity-50">
+                        &lt; Previous
+                    </button>
+                    <div className="flex-grow text-center font-mono text-sm font-bold" style={{ color: COLORS.ORANGE }}>
+                        {lineups[currentLineupIndex].time} (Event {currentLineupIndex + 1} of {lineups.length})
+                    </div>
+                    <button onClick={() => setCurrentLineupIndex(Math.min(maxIndex, currentLineupIndex + 1))}
+                        disabled={currentLineupIndex === maxIndex}
+                        className="p-1 px-3 text-sm bg-gray-300 rounded disabled:opacity-50">
+                        Next &gt;
+                    </button>
+                </div>
+            );
+        };
+
+        // --- MAIN APP (kept close to your working version) ---
+        const App = () => {
+          const { db, userId, isAuthReady, firestorePath, error } = useFirebase();
+          const [subscriptionTier, setSubscriptionTier] = useState('Premiership');
+
+          const [settings, setSettings] = useState(() => {
+            const defaultFormat = '9v9';
+             const formations = FORMATIONS[defaultFormat];
+             const defaultFormationName = formations && formations.length > 0 ? formations[0].name : '';
+            return {
+              gameFormat: defaultFormat,
+              matchDuration: MATCH_DURATIONS[defaultFormat],
+              squadSize: 11,
+              isPermanentGK: true,
+              selectedFormation: defaultFormationName,
+              planType: 'Automatic', 
+              subInterval: 10,
+              firstSubTime: 10,
+              maxSubs: 2,
+              matchPeriods: 'Halves', 
+            };
+          });
+          
+          const [players, setPlayers] = useState(
+            Array.from({ length: 20 }, (_, i) => ({
+              id: generateUUID(),
+              name: i === 0 ? 'Ella (GK)' : i === 1 ? 'Mia' : i < 11 ? `Player ${i + 1}` : '',
+              role: i === 0 ? 'GK' : 'Outfield',
+              startingPosition: i === 0 ? 'GK' : 'Bench', 
+              preferredPosition: i === 0 ? 'GK' : '',
+              secondaryPosition: '',
+              manualMinutes: null,
+            }))
+          );
+
+          const [matchPlan, setMatchPlan] = useState('');
+          const [matchLineups, setMatchLineups] = useState([]);
+          const [currentLineupIndex, setCurrentLineupIndex] = useState(0);
+          const [isGenerating, setIsGenerating] = useState(false);
+          const [savedSquads, setSavedSquads] = useState([]);
+          const [isSavingLoading, setIsSavingLoading] = useState(false);
+
+          const maxSquads = subscriptionTier === 'Championship' ? 2 : Infinity;
+          const isChampionship = subscriptionTier !== 'Basic';
+          const isPremiership = subscriptionTier === 'Premiership';
+          const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
+          const formationsAvailable = FORMATIONS[settings.gameFormat];
+          const activePlayers = useMemo(() => players.filter(p => p.name.trim() !== ''), [players]);
+          const displayedPlayers = useMemo(() => players.slice(0, settings.squadSize), [players, settings.squadSize]);
+
+          useEffect(() => {
+            const duration = MATCH_DURATIONS[settings.gameFormat];
+            const formations = FORMATIONS[settings.gameFormat];
+            const defaultFormationName = formations && formations.length > 0 ? formations[0].name : '';
+            setSettings(prev => ({ 
+              ...prev, 
+              matchDuration: duration,
+              selectedFormation: defaultFormationName,
+              matchPeriods: settings.gameFormat === '5v5' ? prev.matchPeriods : 'Halves', 
+            }));
+          }, [settings.gameFormat]);
+
+          const fetchSquads = useCallback(async () => {
+            if (!isAuthReady || !db || !firestorePath) return;
+            setIsSavingLoading(true);
+            try {
+              const collectionRef = db.collection(firestorePath);
+              const q = db.query(collectionRef);
+              const docs = await retryFetch(() => db.getDocs(q));
+              const squads = docs.docs.map(d => ({ id: d.id, name: d.data().name, data: d.data().players }));
+              setSavedSquads(squads);
+            } finally { setIsSavingLoading(false); }
+          }, [db, firestorePath, isAuthReady]);
+
+          useEffect(() => { if (isChampionship) fetchSquads(); }, [isChampionship, fetchSquads]);
+
+          const handleSaveSquad = async () => {
+            if (!isChampionship || (!isPremiership && savedSquads.length >= maxSquads)) return;
+            const squadName = `Squad ${new Date().toLocaleTimeString()} (${settings.gameFormat})`;
+            setIsSavingLoading(true);
+            try {
+              const squadData = { name: squadName, players: displayedPlayers.filter(p => p.name.trim() !== ''), createdAt: new Date().toISOString() };
+              const collectionRef = db.collection(firestorePath);
+              const newDocRef = db.doc(collectionRef);
+              await retryFetch(() => db.setDoc(newDocRef, squadData));
+              fetchSquads();
+            } finally { setIsSavingLoading(false); }
+          };
+
+          const handleLoadSquad = (squadData) => {
+            const loadedPlayers = squadData.map((p) => ({ ...p, id: p.id || generateUUID() }));
+            setSettings(prev => ({ ...prev, squadSize: loadedPlayers.length }));
+            const newPlayers = Array.from({ length: 20 }, (_, i) => i < loadedPlayers.length ? loadedPlayers[i] :
+                { id: generateUUID(), name: '', role: 'Outfield', startingPosition: 'Bench', preferredPosition: '', secondaryPosition: '', manualMinutes: null }
+            );
+            setPlayers(newPlayers);
+            setMatchPlan(''); setMatchLineups([]); setCurrentLineupIndex(0);
+          };
+
+          const handleDeleteSquad = async (id) => {
+            setIsSavingLoading(true);
+            try {
+              const collectionRef = db.collection(firestorePath);
+              const docRef = db.doc(collectionRef, id);
+              await retryFetch(() => db.deleteDoc(docRef));
+              fetchSquads();
+            } finally { setIsSavingLoading(false); }
+          };
+
+          const handleGeneratePlan = () => {
+            const formationPositions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+            const numPositions = formationPositions.length;
+            const gkPlayer = displayedPlayers.find(p => p.role === 'GK');
+
+            const starters = displayedPlayers.filter(p => p.startingPosition && p.startingPosition !== 'Bench' && p.role !== 'GK' && p.name.trim() !== '');
+            const starterPositions = starters.map(p => p.startingPosition);
+            const uniqueStarterPositions = new Set(starterPositions);
+            
+            if (!gkPlayer || gkPlayer.name.trim() === '') { setMatchPlan('Error: Goalkeeper must be selected (Player 1 defaulted to GK role).'); return; }
+            if (starterPositions.length < numPositions) { setMatchPlan(`Error: You must select exactly ${numPositions} starting outfield positions for the ${settings.selectedFormation} formation.`); return; }
+            if (starterPositions.length > uniqueStarterPositions.size) { setMatchPlan('Error: More than one player is assigned to the same starting position slot.'); return; }
+
+            setIsGenerating(true);
+            setMatchPlan(''); setMatchLineups([]); setCurrentLineupIndex(0);
+
+            setTimeout(() => {
+              try {
+                const playersWithCalculatedMinutes = calculateEqualMinutes(settings, displayedPlayers);
+                const planResult = generateAutomaticPlan(settings, playersWithCalculatedMinutes);
+                let finalPlanText = planResult.planText;
+                const minutesSummary = playersWithCalculatedMinutes
+                    .filter(p => p.name.trim() !== '')
+                    .sort((a, b) => (a.role==='GK'&&b.role!=='GK')?-1:(a.role!=='GK'&&b.role==='GK')?1:a.name.localeCompare(b.name))
+                    .map(p => `${p.name} (${p.role}): ${p.minutes} mins${p.manualMinutes !== null ? ' (Manual)' : ''}`)
+                    .join('\n');
+                finalPlanText += `\n\n--- PLAYER MINUTES SUMMARY ---\n\n${minutesSummary}\n\n------------------------------\n\n`;
+                setMatchPlan(finalPlanText);
+                setMatchLineups(planResult.lineups);
+              } catch (e) {
+                setMatchPlan(`An error occurred during plan generation: ${e.message}`);
+              } finally { setIsGenerating(false); }
+            }, 250);
+          };
+
+          if (error) {
+            return <div className="text-red-600 p-4 bg-red-100 rounded-lg m-4">Initialization Error: {error}</div>;
+          }
+          if (!isAuthReady) {
+            return (
+              <div className="flex justify-center items-center h-screen">
+                <Loader2 className="w-8 h-8" style={{ color: COLORS.NAVY_BLUE }} />
+                <span className="ml-2 font-semibold" style={{ color: COLORS.NAVY_BLUE }}>Authenticating and Initializing...</span>
               </div>
             );
-          })}
-        </div>
-      );
-    };
+          }
 
-    // --- App ---
-    const App = () => {
-      const { db, userId, isAuthReady, firestorePath, error } = useFirebase();
-
-      const persistedTier = localStorage.getItem('tggp_tier') || 'Premiership';
-      const [subscriptionTier, setSubscriptionTier] = useState(persistedTier);
-
-      const defaultFormat = '9v9';
-      const defaultFormation = FORMATIONS[defaultFormat][0].name;
-      const storedSettings = localStorage.getItem('tggp_settings');
-      const [settings, setSettings] = useState(storedSettings ? JSON.parse(storedSettings) : {
-        gameFormat: defaultFormat,
-        matchDuration: MATCH_DURATIONS[defaultFormat],
-        squadSize: 11,
-        isPermanentGK: true,
-        selectedFormation: defaultFormation,
-        planType: 'Automatic',
-        subInterval: 10,
-        firstSubTime: 10,
-        maxSubs: 2,
-        matchPeriods: 'Halves'
-      });
-
-      const storedPlayers = localStorage.getItem('tggp_players');
-      const [players, setPlayers] = useState(storedPlayers ? JSON.parse(storedPlayers) : Array.from({length:20}, (_,i)=>({
-        id: generateUUID(),
-        name: i===0 ? 'Ella (GK)' : i===1 ? 'Mia' : i<11 ? `Player ${i+1}` : '',
-        role: i===0 ? 'GK' : 'Outfield',
-        startingPosition: i===0 ? 'GK' : 'Bench',
-        preferredPosition: i===0 ? 'GK' : '',
-        secondaryPosition: '',
-        benchPriority: 'Normal',
-        targetMinutes: null,
-        manualMinutes: null,
-        minutes: 0
-      })));
-
-      const [isAssignMode, setIsAssignMode] = useState(false);
-      const [selectedForTap, setSelectedForTap] = useState(null);
-
-      const [matchPlan, setMatchPlan] = useState('');
-      const [matchLineups, setMatchLineups] = useState([]);
-      const [currentLineupIndex, setCurrentLineupIndex] = useState(0);
-      const [isGenerating, setIsGenerating] = useState(false);
-      const [savedSquads, setSavedSquads] = useState([]);
-      const [isSavingLoading, setIsSavingLoading] = useState(false);
-      const [minutesError, setMinutesError] = useState(null);
-
-      const maxSquads = subscriptionTier==='Championship' ? 2 : Infinity;
-      const isChampionshipPlus = subscriptionTier!=='Basic';
-      const isPremiership = subscriptionTier==='Premiership';
-      const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
-      const formationsAvailable = FORMATIONS[settings.gameFormat];
-      const displayedPlayers = useMemo(()=>players.slice(0, settings.squadSize), [players, settings.squadSize]);
-
-      // persist
-      useEffect(()=>{ localStorage.setItem('tggp_tier', subscriptionTier); },[subscriptionTier]);
-      useEffect(()=>{ localStorage.setItem('tggp_settings', JSON.stringify(settings)); },[settings]);
-      useEffect(()=>{ localStorage.setItem('tggp_players', JSON.stringify(players)); },[players]);
-
-      // sync duration/formation on format change
-      useEffect(()=>{
-        const duration = MATCH_DURATIONS[settings.gameFormat];
-        const defForm = FORMATIONS[settings.gameFormat][0].name;
-        setSettings(prev=>({
-          ...prev,
-          matchDuration: duration,
-          selectedFormation: defForm,
-          matchPeriods: settings.gameFormat==='5v5' ? prev.matchPeriods : 'Halves'
-        }));
-      }, [settings.gameFormat]);
-
-      // squads (mock)
-      const fetchSquads = useCallback(async ()=>{
-        if (!isAuthReady || !db || !firestorePath) return;
-        setIsSavingLoading(true);
-        try{
-          const col = db.collection(firestorePath);
-          const q = db.query(col);
-          const docs = await db.getDocs(q);
-          setSavedSquads(docs.docs.map(d=>({id:d.id, name:d.data().name, data:d.data().players})));
-        } finally { setIsSavingLoading(false); }
-      }, [db, firestorePath, isAuthReady]);
-      useEffect(()=>{ if (isChampionshipPlus) fetchSquads(); }, [isChampionshipPlus, fetchSquads]);
-
-      const handleSaveSquad = async ()=>{
-        if (!isChampionshipPlus || (!isPremiership && savedSquads.length>=maxSquads)) return;
-        const name = `Squad ${new Date().toLocaleTimeString()} (${settings.gameFormat})`;
-        setIsSavingLoading(true);
-        try{
-          const col = db.collection(firestorePath);
-          const doc = db.doc(col);
-          await db.setDoc(doc, { name, players: displayedPlayers.filter(p=>p.name.trim()!=='') , createdAt:new Date().toISOString() });
-          fetchSquads();
-        } finally { setIsSavingLoading(false); }
-      };
-      const handleLoadSquad = (data)=>{
-        const loaded = data.map(p=>({...p, id:p.id||generateUUID()}));
-        setSettings(prev=>({...prev, squadSize: loaded.length}));
-        const newP = Array.from({length:20}, (_,i)=> i<loaded.length ? loaded[i] :
-          {id:generateUUID(), name:'', role:'Outfield', startingPosition:'Bench', preferredPosition:'', secondaryPosition:'', benchPriority:'Normal', targetMinutes:null, manualMinutes:null, minutes:0});
-        setPlayers(newP);
-        setMatchPlan(''); setMatchLineups([]); setCurrentLineupIndex(0);
-      };
-      const handleDeleteSquad = async (id)=>{
-        setIsSavingLoading(true);
-        try{
-          const col = db.collection(firestorePath);
-          const doc = db.doc(col, id);
-          await db.deleteDoc(doc);
-          fetchSquads();
-        } finally { setIsSavingLoading(false); }
-      };
-
-      const validateBeforeGenerate = ()=>{
-        const res = calculateMinutesWithTargets(settings, displayedPlayers);
-        if (res.error) return res.error;
-        const gk = displayedPlayers.find(p=>p.role==='GK');
-        if (!gk || gk.name.trim()==='') return 'Goalkeeper must be selected (Player 1 defaults to GK).';
-        const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
-        const starters = displayedPlayers.filter(p=>p.startingPosition && p.startingPosition!=='Bench' && p.role!=='GK' && p.name.trim()!=='');
-        const posList = starters.map(s=>s.startingPosition);
-        const uniq = new Set(posList);
-        if (posList.length < slots.length) return `You must select exactly ${slots.length} starting outfield positions for ${settings.selectedFormation}.`;
-        if (posList.length > uniq.size) return 'More than one player is assigned to the same starting position slot.';
-        return null;
-      };
-
-      const handleGeneratePlan = ()=>{
-        setMinutesError(null);
-        const err = validateBeforeGenerate();
-        if (err) { setMatchPlan('Error: ' + err); setMinutesError(err.includes('exceed available') ? err : null); return; }
-
-        setIsGenerating(true);
-        setMatchPlan(''); setMatchLineups([]); setCurrentLineupIndex(0);
-
-        setTimeout(()=>{
-          try{
-            const { players: withMinutes } = calculateMinutesWithTargets(settings, displayedPlayers);
-            const planResult = generateAutomaticPlan(settings, withMinutes);
-
-            let final = `=== PLAN SUMMARY ===\nFormat: ${settings.gameFormat}\nFormation: ${settings.selectedFormation}\nDuration: ${settings.matchDuration} min\nGK: ${displayedPlayers.find(p=>p.role==='GK')?.name || 'Unassigned'}\n\n`;
-            final += planResult.planText;
-
-            const summary = (withMinutes||displayedPlayers)
-              .filter(p=>p.name.trim()!=='')
-              .sort((a,b)=> (a.role==='GK' && b.role!=='GK') ? -1 : (a.role!=='GK' && b.role==='GK') ? 1 : a.name.localeCompare(b.name))
-              .map(p=>`${p.name} (${p.role}) — Target: ${p.targetMinutes||0} | Assigned: ${p.minutes||0}${p.manualMinutes!==null?' (Manual)':''} | Priority: ${p.benchPriority||'Normal'}`)
-              .join('\n');
-
-            final += `\n\n--- PLAYER MINUTES SUMMARY ---\n\n${summary}\n\n------------------------------\n\n`;
-
-            setMatchPlan(final);
-            setMatchLineups(planResult.lineups);
-          } catch(e){
-            setMatchPlan(`An error occurred during plan generation: ${e.message}`);
-            console.error(e);
-          } finally { setIsGenerating(false); }
-        }, 250);
-      };
-
-      if (error){ return <div className="text-red-600 p-4 bg-red-100 rounded-lg m-4">Initialization Error: {error}</div>; }
-      if (!isAuthReady){
-        return (
-          <div className="flex justify-center items-center h-screen">
-            <Loader2 className="w-8 h-8" style={{color:COLORS.NAVY_BLUE}} />
-            <span className="ml-2 font-semibold" style={{color:COLORS.NAVY_BLUE}}>Authenticating and Initializing...</span>
-          </div>
-        );
-      }
-
-      const subRec = recommendSubs(settings, settings.squadSize);
-
-      return (
-        <div className="p-4 md:p-8 min-h-screen" style={{backgroundColor:COLORS.WHITE}}>
-          <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{borderColor:COLORS.NAVY_BLUE}}>
-            <div className="flex items-center space-x-4">
-              <img src="https://res.cloudinary.com/df5od6eln/image/upload/v1760535162/TGGP_logo_2_doknd6.png" alt="The Girls' Game Plan Logo" className="w-16 h-16 rounded-full shadow-lg" />
-              <div>
-                <h1 className="text-4xl font-extrabold" style={{color:COLORS.NAVY_BLUE}}>The Girls' Game Planner</h1>
-                <div className="mt-2 flex items-center gap-2">
-                  <label className="text-xs font-semibold" style={{color:COLORS.NAVY_BLUE}}>Tier:</label>
-                  <select value={subscriptionTier} onChange={e=>setSubscriptionTier(e.target.value)} className="text-xs p-1 rounded border bg-white">
-                    <option>Basic</option><option>Championship</option><option>Premiership</option>
-                  </select>
-                  <SubscriptionBadge tier={subscriptionTier} />
+          return (
+            <div className="p-4 md:p-8 min-h-screen" style={{ backgroundColor: COLORS.WHITE, fontFamily: 'Inter, sans-serif' }}>
+              <header className="flex flex-col md:flex-row justify-between items-center pb-6 border-b-4 mb-6" style={{ borderColor: COLORS.NAVY_BLUE }}>
+                <div className="flex items-center space-x-4">
+                  <img src="https://res.cloudinary.com/df5od6eln/image/upload/v1760535162/TGGP_logo_2_doknd6.png" alt="The Girls' Game Plan Logo" className="w-16 h-16 rounded-full shadow-lg" />
+                  <h1 className="text-4xl font-extrabold" style={{ color: COLORS.NAVY_BLUE }}>The Girls' Game Planner</h1> 
                 </div>
-              </div>
-            </div>
-            <div className="mt-3 md:mt-0 text-sm font-medium p-2 rounded-lg" style={{backgroundColor:COLORS.SKY_BLUE, color:COLORS.NAVY_BLUE}}>
-              <User className="inline w-4 h-4 mr-1 align-sub" /> User ID: <span className="font-mono text-xs">{userId}</span>
-            </div>
-          </header>
+                <SubscriptionBadge tier={subscriptionTier} />
+              </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="p-6 rounded-xl shadow-2xl" style={{backgroundColor:COLORS.NAVY_BLUE, color:COLORS.WHITE}}>
-                <h2 className="text-2xl font-bold mb-4 flex items-center"><Settings className="w-6 h-6 mr-2" /> Match Setup</h2>
+              <p className="text-sm font-medium mb-6 p-3 rounded-lg" style={{ backgroundColor: COLORS.SKY_BLUE, color: COLORS.NAVY_BLUE }}>
+                <User className="inline w-4 h-4 mr-1 align-sub" /> User ID: <span className="font-mono text-xs">{userId}</span>
+              </p>
 
-                <div className="space-y-4">
-                  <label className="block">Game Format (XvX)</label>
-                  <select value={settings.gameFormat} onChange={e=>setSettings(p=>({...p, gameFormat:e.target.value}))}
-                          className="w-full p-2 rounded-lg text-lg font-semibold" style={{backgroundColor:COLORS.WHITE, color:COLORS.NAVY_BLUE}}>
-                    {Object.keys(FORMATIONS).map(f=><option key={f} value={f}>{f}</option>)}
-                  </select>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="p-6 rounded-xl shadow-2xl" style={{ backgroundColor: COLORS.NAVY_BLUE, color: COLORS.WHITE }}>
+                    <h2 className="text-2xl font-bold mb-4 flex items-center"><Settings className="w-6 h-6 mr-2" /> Match Setup</h2>
 
-                  <label className="block pt-2">Match Duration (min)</label>
-                  <input type="number" value={settings.matchDuration} readOnly disabled
-                         className="w-full p-2 rounded-lg text-lg font-semibold bg-gray-200 cursor-not-allowed" style={{color:COLORS.NAVY_BLUE}} />
-                  <p className="text-xs text-white/70 mt-1">Auto-set for {settings.gameFormat}.</p>
+                    <div className="space-y-4">
+                      <label className="block">Game Format (XvX)</label>
+                      <select value={settings.gameFormat} onChange={(e) => setSettings(p => ({ ...p, gameFormat: e.target.value }))}
+                        className="w-full p-2 rounded-lg text-lg font-semibold" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}>
+                        {Object.keys(FORMATIONS).map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
 
-                  {settings.gameFormat==='5v5' && (
-                    <div className="pt-2">
-                      <label className="block">5v5 Match Periods</label>
+                      <label className="block pt-2">Match Duration (min)</label>
+                      <input type="number" value={settings.matchDuration} readOnly disabled
+                        className="w-full p-2 rounded-lg text-lg font-semibold bg-gray-200 cursor-not-allowed" style={{ color: COLORS.NAVY_BLUE }} />
+
+                      {settings.gameFormat === '5v5' && (
+                        <div className="pt-2">
+                          <label className="block">5v5 Match Periods</label>
+                          <div className="flex space-x-4">
+                            <label className="flex items-center">
+                              <input type="radio" checked={settings.matchPeriods === 'Halves'}
+                                onChange={() => setSettings(p => ({ ...p, matchPeriods: 'Halves' }))} className="mr-2" /> Halves (2 x 20 min)
+                            </label>
+                            <label className="flex items-center">
+                              <input type="radio" checked={settings.matchPeriods === 'Quarters'}
+                                onChange={() => setSettings(p => ({ ...p, matchPeriods: 'Quarters' }))} className="mr-2" /> Quarters (4 x 10 min)
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      <label className="block pt-2">Squad Size</label>
+                      <input type="number" min={outfieldSpots + (settings.isPermanentGK ? 1 : 0)} value={settings.squadSize}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSettings(p => ({ ...p, squadSize: val === '' ? 0 : Number(val) })); /* FIX: accepts 8 */
+                        }}
+                        className="w-full p-2 rounded-lg text-lg font-semibold" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }} />
+
+                      <label className="block pt-2">Goalkeeper Rotation</label>
                       <div className="flex space-x-4">
                         <label className="flex items-center">
-                          <input type="radio" checked={settings.matchPeriods==='Halves'} onChange={()=>setSettings(p=>({...p, matchPeriods:'Halves'}))} className="mr-2" /> Halves (2 x 20)
+                          <input type="radio" checked={settings.isPermanentGK}
+                            onChange={() => setSettings(p => ({ ...p, isPermanentGK: true, gkRotation: false }))} className="mr-2" /> Permanent GK
                         </label>
                         <label className="flex items-center">
-                          <input type="radio" checked={settings.matchPeriods==='Quarters'} onChange={()=>setSettings(p=>({...p, matchPeriods:'Quarters'}))} className="mr-2" /> Quarters (4 x 10)
+                          <input type="radio" checked={!settings.isPermanentGK}
+                            onChange={() => setSettings(p => ({ ...p, isPermanentGK: false, gkRotation: true }))} className="mr-2" /> Rotating GK
                         </label>
+                      </div>
+
+                      <label className="block pt-2">Formation (Outfield Players)</label>
+                      <select value={settings.selectedFormation} onChange={(e) => setSettings(p => ({ ...p, selectedFormation: e.target.value }))}
+                        className="w-full p-2 rounded-lg text-lg font-semibold" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}>
+                        {formationsAvailable.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {isChampionship && (
+                    <div className="p-6 rounded-xl shadow-lg border" style={{ borderColor: COLORS.NAVY_BLUE }}>
+                      <h3 className="text-xl font-bold mb-4 flex items-center" style={{ color: COLORS.NAVY_BLUE }}>
+                        <Save className="w-5 h-5 mr-2" style={{ color: COLORS.NAVY_BLUE }} /> Squad Management
+                      </h3>
+                      <p className="text-sm mb-4" style={{ color: COLORS.NAVY_BLUE }}>
+                        {isPremiership ? 'Unlimited Squad Saves' : `Save up to ${maxSquads} Squads`} (Current: {savedSquads.length})
+                      </p>
+                      <Button onClick={handleSaveSquad} disabled={isSavingLoading || (!isPremiership && savedSquads.length >= maxSquads)} color={COLORS.SKY_BLUE}>
+                        {isSavingLoading ? <Loader2 className="w-5 h-5 mr-2" /> : 'Save Current Squad'}
+                      </Button>
+                      <div className="mt-4 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {savedSquads.map(squad => (
+                          <div key={squad.id} className="flex justify-between items-center p-2 rounded-lg border" style={{ borderColor: COLORS.SKY_BLUE }}>
+                            <span className="text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>{squad.name} ({squad.data.length} players)</span>
+                            <div className="flex space-x-1">
+                              <button onClick={() => handleLoadSquad(squad.data)} className="text-xs px-2 py-1 rounded-full text-white" style={{ backgroundColor: COLORS.ORANGE }}>Load</button>
+                              <button onClick={() => handleDeleteSquad(squad.id)} className="text-xs px-2 py-1 rounded-full text-white bg-red-500">Del</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+                </div>
 
-                  <label className="block pt-2">Squad Size</label>
-                  {/* FIXED: accept 8 (no leading zero) */}
-                  <input type="number" min={outfieldSpots + (settings.isPermanentGK?1:0)} value={settings.squadSize}
-                         onChange={e=>{
-                           const val = e.target.value;
-                           setSettings(p=>({...p, squadSize: val === '' ? 0 : Number(val)}));
-                         }}
-                         className="w-full p-2 rounded-lg text-lg font-semibold" style={{backgroundColor:COLORS.WHITE, color:COLORS.NAVY_BLUE}} />
-
-                  <label className="block pt-2">Goalkeeper</label>
-                  <div className="flex space-x-4">
-                    <label className="flex items-center"><input type="radio" checked={settings.isPermanentGK}
-                      onChange={()=>setSettings(p=>({...p, isPermanentGK:true}))} className="mr-2" /> Permanent GK</label>
-                    <label className="flex items-center"><input type="radio" checked={!settings.isPermanentGK}
-                      onChange={()=>setSettings(p=>({...p, isPermanentGK:false}))} className="mr-2" /> Rotating GK</label>
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="p-6 rounded-xl shadow-2xl bg-white">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center" style={{ color: COLORS.NAVY_BLUE }}><User className="w-6 h-6 mr-2" /> Player Roster</h2>
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                      {displayedPlayers.map((player, index) => (
+                        <PlayerInputRow key={player.id} player={player} index={index} settings={settings} setPlayers={setPlayers} subscriptionTier={subscriptionTier} />
+                      ))}
+                    </div>
                   </div>
 
-                  <label className="block pt-2">Formation</label>
-                  <select value={settings.selectedFormation} onChange={e=>setSettings(p=>({...p, selectedFormation:e.target.value}))}
-                          className="w-full p-2 rounded-lg text-lg font-semibold" style={{backgroundColor:COLORS.WHITE, color:COLORS.NAVY_BLUE}}>
-                    {formationsAvailable.map(f=><option key={f.name} value={f.name}>{f.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {isChampionshipPlus && (
-                <div className="p-6 rounded-xl shadow-lg border" style={{borderColor:COLORS.NAVY_BLUE}}>
-                  <h3 className="text-xl font-bold mb-4 flex items-center" style={{color:COLORS.NAVY_BLUE}}>
-                    <SaveI className="w-5 h-5 mr-2" style={{color:COLORS.NAVY_BLUE}} /> Squad Management
-                  </h3>
-                  <p className="text-sm mb-4" style={{color:COLORS.NAVY_BLUE}}>
-                    {isPremiership ? 'Unlimited Squad Saves' : `Save up to ${maxSquads} Squads`} (Current: {savedSquads.length})
-                  </p>
-                  <Button onClick={handleSaveSquad} disabled={isSavingLoading || (!isPremiership && savedSquads.length>=maxSquads)} color={COLORS.SKY_BLUE}>
-                    {isSavingLoading ? <Loader2 className="w-5 h-5 mr-2" /> : 'Save Current Squad'}
-                  </Button>
-                  <div className="mt-4 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                    {savedSquads.map(s=>(
-                      <div key={s.id} className="flex justify-between items-center p-2 rounded-lg border" style={{borderColor:COLORS.SKY_BLUE}}>
-                        <span className="text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>{s.name} ({s.data.length} players)</span>
-                        <div className="flex space-x-1">
-                          <button onClick={()=>handleLoadSquad(s.data)} className="text-xs px-2 py-1 rounded-full text-white" style={{background:COLORS.ORANGE}}>Load</button>
-                          <button onClick={()=>handleDeleteSquad(s.id)} className="text-xs px-2 py-1 rounded-full text-white bg-red-500">Del</button>
+                  <div className="p-6 rounded-xl shadow-lg bg-white border" style={{ borderColor: COLORS.SKY_BLUE }}>
+                    <h3 className="text-xl font-bold mb-4" style={{ color: COLORS.NAVY_BLUE }}>Plan Options</h3>
+                    
+                    <div className="flex space-x-4 mb-6">
+                        <div className={`p-4 rounded-lg flex-1 shadow-md border ${settings.planType === 'Automatic' ? 'border-2' : 'border'}`} style={{ borderColor: settings.planType === 'Automatic' ? COLORS.ORANGE : COLORS.NAVY_BLUE }}>
+                            <label className="flex items-center font-bold w-full" style={{ color: COLORS.NAVY_BLUE }}>
+                                <input type="radio" checked={settings.planType === 'Automatic'} onChange={() => setSettings(p => ({ ...p, planType: 'Automatic' }))} className="mr-3" /> 
+                                Automatic (Equal Minutes)
+                            </label>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="p-6 rounded-xl shadow-2xl bg-white">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold mb-4 flex items-center" style={{color:COLORS.NAVY_BLUE}}>
-                    <User className="w-6 h-6 mr-2" /> Player Roster
-                  </h2>
-                  <button className={`text-xs px-3 py-2 rounded-full border ${isAssignMode?'bg-green-600 text-white border-green-700':'bg-white text-gray-700'}`}
-                          onClick={()=>setIsAssignMode(s=>!s)}>
-                    {isAssignMode ? 'Assign on Pitch: ON' : 'Assign on Pitch: OFF'}
-                  </button>
-                </div>
-                <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                  {displayedPlayers.map((p,i)=>(
-                    <div key={p.id} onClick={()=> isAssignMode && setSelectedForTap(p.id)} className={`${isAssignMode && selectedForTap===p.id ? 'ring-2 ring-sky-400 rounded-lg' : ''}`}>
-                      <PlayerInputRow player={p} index={i} settings={settings} setPlayers={setPlayers} subscriptionTier={subscriptionTier} />
-                    </div>
-                  ))}
-                </div>
-                {isAssignMode && (
-                  <p className="text-xs mt-2 text-gray-600 flex items-center gap-2"><DragI/> Drag a player bubble to a slot, or tap a player row then tap a slot on the pitch.</p>
-                )}
-              </div>
-
-              <div className="p-6 rounded-xl shadow-lg bg-white border" style={{borderColor:COLORS.SKY_BLUE}}>
-                <h3 className="text-xl font-bold mb-4" style={{color:COLORS.NAVY_BLUE}}>Plan Options</h3>
-
-                <div className="flex flex-wrap gap-4 mb-6">
-                  <div className={`p-4 rounded-lg flex-1 shadow-md border ${settings.planType==='Automatic'?'border-2':''}`}
-                       style={{borderColor: settings.planType==='Automatic' ? COLORS.ORANGE : COLORS.NAVY_BLUE}}>
-                    <label className="flex items-center font-bold w-full" style={{color:COLORS.NAVY_BLUE}}>
-                      <input type="radio" checked={settings.planType==='Automatic'} onChange={()=>setSettings(p=>({...p, planType:'Automatic'}))} className="mr-3" />
-                      Automatic (Equal Minutes + Target Minimums)
-                    </label>
-                  </div>
-                  <div className={`p-4 rounded-lg flex-1 shadow-md border ${isPremiership?'':'opacity-50 cursor-not-allowed'}`}
-                       style={{borderColor: settings.planType==='Manual' ? COLORS.ORANGE : COLORS.NAVY_BLUE}}>
-                    <label className="flex items-center font-bold w-full" style={{color:COLORS.NAVY_BLUE}}>
-                      <input type="radio" checked={settings.planType==='Manual'} onChange={()=>isPremiership && setSettings(p=>({...p, planType:'Manual'}))} className="mr-3" disabled={!isPremiership}/>
-                      Manual Plan {isPremiership?'':'(Premiership Only)'}
-                    </label>
-                  </div>
-                </div>
-
-                {settings.planType==='Automatic' && (
-                  <div className="sub-control-block grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <p className={`md:col-span-3 text-sm font-semibold mb-2 ${isPremiership?'text-gray-700':'text-orange-500'}`}>
-                      {isPremiership ? 'Substitution Frequency (Premiership)' : 'Upgrade to Premiership for Sub Control'}
-                    </p>
-                    <div>
-                      <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>Interval (min)</label>
-                      <select value={settings.subInterval} onChange={e=>setSettings(p=>({...p, subInterval:Number(e.target.value)}))}
-                              className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
-                        {[5,8,10,15].map(v=><option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>First Sub (min)</label>
-                      <select value={settings.firstSubTime} onChange={e=>setSettings(p=>({...p, firstSubTime:Number(e.target.value)}))}
-                              className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
-                        {[5,8,10,15].map(v=><option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>Max Subs (#)</label>
-                      <select value={settings.maxSubs} onChange={e=>setSettings(p=>({...p, maxSubs:Number(e.target.value)}))}
-                              className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
-                        {[1,2,3,4].map(v=><option key={v} value={v}>{v}</option>)}
-                      </select>
+                        <div className={`p-4 rounded-lg flex-1 shadow-md border ${isPremiership ? '' : 'opacity-50 cursor-not-allowed'}`} style={{ borderColor: settings.planType === 'Manual' ? COLORS.ORANGE : COLORS.NAVY_BLUE }}>
+                            <label className="flex items-center font-bold w-full" style={{ color: COLORS.NAVY_BLUE }}>
+                                <input type="radio" checked={settings.planType === 'Manual'} onChange={() => isPremiership && setSettings(p => ({ ...p, planType: 'Manual' }))} className="mr-3" disabled={!isPremiership} /> 
+                                Manual Plan {isPremiership ? '' : '(Premiership Only)'}
+                            </label>
+                        </div>
                     </div>
 
-                    {isPremiership && (
-                      <div className="md:col-span-3 p-3 rounded-lg bg-white border" style={{borderColor:COLORS.SKY_BLUE}}>
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                          <div className="text-sm" style={{color:COLORS.NAVY_BLUE}}>
-                            <strong>Sub Recommendation:</strong> Interval <span className="font-mono">{recommendSubs(settings, settings.squadSize).subInterval}</span> min,
-                            First Sub <span className="font-mono">{recommendSubs(settings, settings.squadSize).firstSubTime}</span> min,
-                            Max Subs <span className="font-mono">{recommendSubs(settings, settings.squadSize).maxSubs}</span>. <em>{recommendSubs(settings, settings.squadSize).note}</em>
-                          </div>
-                          <Button className="mt-3 md:mt-0" color={COLORS.NAVY_BLUE}
-                            onClick={()=>{
-                              const sr = recommendSubs(settings, settings.squadSize);
-                              setSettings(p=>({...p, subInterval:sr.subInterval, firstSubTime:sr.firstSubTime, maxSubs:sr.maxSubs}));
-                            }}>
-                            Apply Suggestion
-                          </Button>
+                    {settings.planType === 'Automatic' && (
+                      <div className="sub-control-block grid grid-cols-3 gap-4">
+                        <p className={`col-span-3 text-sm font-semibold mb-2 ${isPremiership ? 'text-gray-700' : 'text-orange-500'}`}>
+                          {isPremiership ? 'Substitution Frequency (Premiership)' : 'Upgrade to Premiership for Sub Control'}
+                        </p>
+                        <div>
+                          <label className="block text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>Interval (min)</label>
+                          <select value={settings.subInterval} onChange={(e) => setSettings(p => ({ ...p, subInterval: parseInt(e.target.value, 10) }))}
+                            className="w-full p-2 rounded-lg text-sm" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
+                            disabled={!isPremiership}>
+                            {[5, 8, 10, 15].map(v => <option key={v} value={v}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>First Sub (min)</label>
+                          <select value={settings.firstSubTime} onChange={(e) => setSettings(p => ({ ...p, firstSubTime: parseInt(e.target.value, 10) }))}
+                            className="w-full p-2 rounded-lg text-sm" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
+                            disabled={!isPremiership}>
+                            {[5, 8, 10, 15].map(v => <option key={v} value={v}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium" style={{ color: COLORS.NAVY_BLUE }}>Max Subs (#)</label>
+                          <select value={settings.maxSubs} onChange={(e) => setSettings(p => ({ ...p, maxSubs: parseInt(e.target.value, 10) }))}
+                            className="w-full p-2 rounded-lg text-sm" style={{ backgroundColor: COLORS.WHITE, color: COLORS.NAVY_BLUE }}
+                            disabled={!isPremiership}>
+                            {[1, 2, 3, 4].map(v => <option key={v} value={v}>{v}</option>)}
+                          </select>
                         </div>
                       </div>
                     )}
+                    
+                    <Button onClick={handleGeneratePlan} disabled={isGenerating} color={COLORS.ORANGE} className="mt-6 w-full">
+                      {isGenerating ? <Loader2 className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
+                      {isGenerating ? 'Generating...' : 'Generate Match Plan'}
+                    </Button>
                   </div>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button onClick={handleGeneratePlan} disabled={isGenerating} color={COLORS.ORANGE}>
-                    {isGenerating ? <Loader2 className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
-                    {isGenerating ? 'Generating...' : 'Generate Match Plan'}
-                  </Button>
-                  <button className={`text-xs px-3 py-2 rounded-full border ${isAssignMode?'bg-green-600 text-white border-green-700':'bg-white text-gray-700'}`}
-                          onClick={()=>setIsAssignMode(s=>!s)}>
-                    {isAssignMode ? 'Assign on Pitch: ON' : 'Assign on Pitch: OFF'}
-                  </button>
                 </div>
+              </div>
 
-                {minutesError && (
-                  <div className="mt-3 p-3 rounded bg-red-50 text-red-700 text-sm border border-red-200">
-                    {minutesError}
+              <div className="mt-8">
+                <h2 className="text-3xl font-bold mb-4" style={{ color: COLORS.NAVY_BLUE }}>Match Plan Output</h2>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="p-6 rounded-xl shadow-xl bg-gray-50">
+                    <h3 className="text-xl font-bold mb-4 border-b pb-2" style={{ color: COLORS.NAVY_BLUE, borderColor: COLORS.SKY_BLUE }}>Substitution Schedule</h3>
+                    <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed" style={{ color: COLORS.NAVY_BLUE }}>
+                      {matchPlan || 'Press "Generate Match Plan" to see the schedule here.'}
+                    </pre>
+                     {matchPlan && (
+                        <div className="mt-4 flex gap-2">
+                            <Button onClick={() => handleDownloadPlan(matchPlan, settings, displayedPlayers)} color={COLORS.NAVY_BLUE}>
+                                <Download className="w-5 h-5 mr-2"/> Download CSV
+                            </Button>
+                        </div>
+                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
 
-          {/* Output */}
-          <div className="mt-8">
-            <h2 className="text-3xl font-bold mb-4" style={{color:COLORS.NAVY_BLUE}}>Match Plan Output</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="p-6 rounded-xl shadow-xl bg-gray-50">
-                <h3 className="text-xl font-bold mb-4 border-b pb-2 flex items-center justify-between" style={{color:COLORS.NAVY_BLUE, borderColor:COLORS.SKY_BLUE}}>
-                  <span>Substitution Schedule</span>
-                  {matchPlan && (
-                    <div className="flex gap-2">
-                      <Button onClick={()=>handleDownloadPlan(matchPlan, settings, displayedPlayers)} color={COLORS.NAVY_BLUE}>
-                        <Download className="w-5 h-5 mr-2" /> CSV
-                      </Button>
-                      <Button onClick={()=>copyToClipboard(matchPlan)} color={COLORS.SKY_BLUE}>
-                        <CopyI className="w-5 h-5 mr-2" /> Copy
-                      </Button>
-                    </div>
-                  )}
-                </h3>
-                <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed" style={{color:COLORS.NAVY_BLUE}}>
-{matchPlan || 'Press "Generate Match Plan" to see the schedule here.'}
-                </pre>
-                {matchPlan && (
-                  <ComplianceTable players={JSON.parse(localStorage.getItem('tggp_players')||'[]').slice(0, settings.squadSize)} />
-                )}
-              </div>
+                  <div className="p-6 rounded-xl shadow-xl bg-white">
+                    <h3 className="text-xl font-bold mb-4 border-b pb-2" style={{ color: COLORS.NAVY_BLUE, borderColor: COLORS.SKY_BLUE }}>
+                      Live Formation Visual
+                    </h3>
 
-              <div className="p-6 rounded-xl shadow-xl bg-white">
-                <div className="flex items-center justify-between mb-4 border-b pb-2" style={{borderColor:COLORS.SKY_BLUE}}>
-                  <h3 className="text-xl font-bold" style={{color:COLORS.NAVY_BLUE}}>Live Formation Visual</h3>
+                    {subscriptionTier==='Premiership' && matchLineups.length > 1 && (
+                        <SubstitutionTimeline 
+                            lineups={matchLineups}
+                            currentLineupIndex={currentLineupIndex}
+                            setCurrentLineupIndex={setCurrentLineupIndex}
+                        />
+                    )}
+
+                    {settings.selectedFormation && (
+                      <PositionVisualizer 
+                            settings={settings} 
+                            lineups={matchLineups.length > 0 ? matchLineups : [{ players: displayedPlayers.map(p => ({...p, position: p.startingPosition || 'Bench'})), time: 'Current Roster'}]} 
+                            currentLineupIndex={currentLineupIndex}
+                            isPremiership={isPremiership}
+                        />
+                    )}
+                  </div>
                 </div>
-
-                {subscriptionTier==='Premiership' && matchLineups.length>1 && (
-                  <SubstitutionTimeline lineups={matchLineups} currentLineupIndex={currentLineupIndex} setCurrentLineupIndex={setCurrentLineupIndex} />
-                )}
-
-                <PositionVisualizer
-                  settings={settings}
-                  lineups={matchLineups.length>0 ? matchLineups : [{
-                    players: displayedPlayers.map(p=>({...p, position: p.startingPosition || 'Bench'})),
-                    time: 'Current Roster'
-                  }]}
-                  currentLineupIndex={currentLineupIndex}
-                  isPremiership={subscriptionTier==='Premiership'}
-
-                  isAssignMode={isAssignMode}
-                  displayedPlayers={displayedPlayers}
-                  setPlayers={setPlayers}
-                  selectedForTap={selectedForTap}
-                  setSelectedForTap={setSelectedForTap}
-                />
               </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
 </body>
 </html>
+
