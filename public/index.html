@@ -17,6 +17,11 @@
     .sub-control-block { padding:1rem; border:2px solid #56B0D5; border-radius:0.5rem; background:#F8FFFF; }
     .drop-slot { transition: transform .1s ease, box-shadow .1s ease; }
     .drop-slot.dragover { transform: scale(1.06); box-shadow: 0 0 0 3px rgba(86,176,213,.6) inset; }
+    .pos-badge {
+      position:absolute; top:-6px; right:-6px; font-size:10px; line-height:1; 
+      background: rgba(0,0,0,.65); color:#fff; padding:2px 4px; border-radius:6px;
+      border:1px solid rgba(255,255,255,.35);
+    }
   </style>
 </head>
 <body>
@@ -37,7 +42,7 @@
     const DragI = (p) => <Icon {...p}>✋</Icon>;
     const TapI  = (p) => <Icon {...p}>👆</Icon>;
 
-    const {useState, useEffect, useMemo, useCallback, useRef} = React;
+    const {useState, useEffect, useMemo, useCallback} = React;
 
     // --- basic utils / mock db ---
     const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -59,6 +64,8 @@
         { name:'2-3-1', slots:['CD-R','CD-L','CM-R','CM-L','CM','ST'], maxPlayers:6 },
         { name:'1-2-3', slots:['CD','CM-R','CM-L','ST-R','ST-L','ST'], maxPlayers:6 },
         { name:'1-4-1', slots:['CD','CM-R','CM-L','RW','LW','ST'], maxPlayers:6 },
+        // NEW: tester requested 3-2-1
+        { name:'3-2-1', slots:['CD-R','CD','CD-L','CM-R','CM-L','ST'], maxPlayers:6 },
       ],
       '9v9': [
         { name:'3-2-3', slots:['CD-R','CD-L','CD','CM-R','CM-L','ST-R','ST-L','ST'], maxPlayers:8 },
@@ -100,10 +107,9 @@
     };
 
     // --- minutes: equal w/ target-min support ---
-    // Targets act as MINIMUMS for outfield players with manualMinutes === null
     const calculateMinutesWithTargets = (settings, players) => {
       const { gameFormat, matchDuration, isPermanentGK } = settings;
-      if (!matchDuration || matchDuration<=0) return players;
+      if (!matchDuration || matchDuration<=0) return {error:null, players};
 
       const outfieldSpots = getOutfieldMaxPlayers(gameFormat);
       const totalOutfield = outfieldSpots * matchDuration;
@@ -115,16 +121,13 @@
       const targetSum = candidates.reduce((s,p)=> s + Math.min(matchDuration, Math.max(0, p.targetMinutes||0)), 0);
 
       if (manualSum + targetSum > totalOutfield) {
-        // Impossible to satisfy minimums + manuals
         const err = `Manual minutes (${manualSum}) + target minimums (${targetSum}) exceed available outfield minutes (${totalOutfield}). Reduce targets or manual minutes.`;
         return { error: err, players };
       }
 
-      // Start each candidate at their target minimum
       const baseMap = new Map(candidates.map(p => [p.id, Math.min(matchDuration, Math.max(0, p.targetMinutes||0))]));
       let remaining = totalOutfield - manualSum - targetSum;
 
-      // Distribute remaining equally among candidates
       if (candidates.length>0 && remaining>0) {
         const per = Math.floor(remaining / candidates.length);
         let rem = remaining % candidates.length;
@@ -134,17 +137,16 @@
         });
       }
 
-      // Build final minutes
       const out = players.map(p=>{
         if (p.role==='GK' && isPermanentGK) return {...p, minutes: matchDuration};
         if (p.manualMinutes!==null) return {...p, minutes: Math.min(matchDuration, Math.max(0,p.manualMinutes))};
         if (p.role!=='GK' && p.name.trim()!=='') return {...p, minutes: baseMap.get(p.id) || 0};
         return {...p, minutes: 0};
       });
-      return { error: null, players: out };
+      return { error:null, players: out };
     };
 
-    // sub recommendation heuristic
+    // sub suggestion
     const recommendSubs = (settings, squadCount) => {
       const outfieldSpots = getOutfieldMaxPlayers(settings.gameFormat);
       const benchCount = Math.max(0, squadCount - outfieldSpots - (settings.isPermanentGK ? 1 : 0));
@@ -169,7 +171,6 @@
 
       let rotationOutfield = playersWithMinutes
         .filter(p => p.role!=='GK' && p.name.trim()!=='' && p.minutes>0 && p.minutes<matchDuration)
-        // priority (High first), then least total minutes first (to help targets), then name
         .sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes || a.name.localeCompare(b.name));
 
       const gkPlayer = playersWithMinutes.find(p=>p.role==='GK');
@@ -220,7 +221,6 @@
         if (period>1) {
           const pname = periods===4 ? `QUARTER ${period}` : `SECOND HALF`;
           plan += `\n*** ${pname} START (${periodStart}:00) - ROTATION RESET ***\n\n`;
-          // reset: start with benched first to swing minutes
           const allR=[...playing, ...bench];
           allR.sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes);
           playing = allR.slice(0,outfieldSpots);
@@ -246,28 +246,23 @@
             currentPeriodMinutes.set(pl.id, (currentPeriodMinutes.get(pl.id)||0) + elapsed);
             outgoing.push({player:pl, index:idx, position:positions[idx], periodTime: currentPeriodMinutes.get(pl.id)});
           });
-          // sub out those who played most this period
           outgoing.sort((a,b)=> b.periodTime - a.periodTime);
 
           const n = Math.min(maxSubs, bench.length);
           const subsBlock = [];
-          // choose incoming by priority then least total minutes
           let benchOrdered = [...bench].sort((a,b)=> priorityScore(a)-priorityScore(b) || a.minutes-b.minutes || a.name.localeCompare(b.name));
 
           for (let i=0;i<n;i++){
             if (!outgoing.length || !benchOrdered.length) break;
             const out = outgoing.shift();
 
-            // prefer position fits
             let idx = benchOrdered.findIndex(p=>p.preferredPosition===out.position);
             if (idx===-1) idx = benchOrdered.findIndex(p=>p.secondaryPosition===out.position);
-            if (idx===-1) idx = 0; // fallback
+            if (idx===-1) idx = 0;
 
             const incoming = benchOrdered.splice(idx,1)[0];
-            // apply
             playing[out.index] = incoming;
             subsBlock.push({on:incoming, off:out.player, position:out.position});
-            // put outgoing to end of queue
             bench = bench.filter(p=>p.id!==incoming.id);
             bench.push(out.player);
           }
@@ -322,7 +317,6 @@
       catch { alert('Copy failed—select the text and copy manually.'); }
     };
 
-    // --- UI bits ---
     const Button = ({children, color=COLORS.ORANGE, disabled, onClick, className=''}) => (
       <button onClick={onClick} disabled={disabled}
         className={`flex items-center justify-center px-6 py-3 rounded-xl font-bold text-white shadow-lg transition ${disabled?'opacity-50 cursor-not-allowed bg-gray-400':'hover:opacity-90 active:scale-[0.98]'} ${className}`}
@@ -342,7 +336,7 @@
     };
 
     const PlayerInputRow = ({ player, index, settings, setPlayers, subscriptionTier }) => {
-      const isChampionshipPlus = subscriptionTier !== 'Basic'; // Championship & Premiership
+      const isChampionshipPlus = subscriptionTier !== 'Basic';
       const isPremiership = subscriptionTier === 'Premiership';
 
       const currentFormationSlots = useMemo(()=>{
@@ -395,40 +389,39 @@
               </select>
               <input className="col-span-2 p-2 border rounded-lg text-sm text-center" type="number" min="0"
                      placeholder="Target mins" value={player.targetMinutes ?? ''} 
-                     onChange={e=>handleChange('targetMinutes', e.target.value===''?null:parseInt(e.target.value,10))} />
+                     onChange={e=>handleChange('targetMinutes', e.target.value===''?null:Number(e.target.value))} />
               <input className="col-span-2 p-2 border rounded-lg text-sm text-center" type="number" min="0"
                      placeholder="Manual mins" value={player.manualMinutes ?? ''} 
-                     onChange={e=>handleChange('manualMinutes', e.target.value===''?null:parseInt(e.target.value,10))} />
+                     onChange={e=>handleChange('manualMinutes', e.target.value===''?null:Number(e.target.value))} />
             </>
           )}
         </div>
       );
     };
 
+    // UPDATED: PlayerCircle shows first name in bubble + small position badge
     const PlayerCircle = ({ name, position, isGK, color, yPos, xPos, draggable, onDragStart, onClick }) => {
-      const displayPos = position?.length>4 ? position.replace('-', '/') : position || 'POS';
+      const shortPos = (position||'').replace('-R','R').replace('-L','L');
       const firstName = (name||'').split(' ')[0] || '';
       return (
         <div className="absolute flex flex-col items-center justify-center transition-all duration-200 ease-in-out"
              style={{top:`${yPos}%`, left:`${xPos}%`, transform:'translate(-50%,-50%)', zIndex:Math.round(yPos)}}
              draggable={draggable} onDragStart={onDragStart} onClick={onClick}>
-          <div className="w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg border-2"
+          <div className="relative w-12 h-12 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-lg border-2"
                style={{backgroundColor:color, borderColor:isGK?COLORS.ORANGE:color}}>
-            {displayPos}
+            {firstName || '—'}
+            <span className="pos-badge">{position || '—'}</span>
           </div>
-          <span className="text-xs mt-1 font-medium text-center" style={{color:COLORS.NAVY_BLUE}}>{firstName}</span>
         </div>
       );
     };
 
-    // Pitch component supports: assign mode (drag or tap)
+    // Pitch with assign mode & lineup-aware slot bubbles
     const PositionVisualizer = ({
       settings, lineups, currentLineupIndex, isPremiership,
-      // assign mode
       isAssignMode, displayedPlayers, setPlayers, selectedForTap, setSelectedForTap
     }) => {
       const displayLineup = lineups[currentLineupIndex] || { players:[], time:'N/A' };
-      const playersOnField = displayLineup.players.filter(p=>p.position!=='Bench' && (p.name||'').trim()!=='');
 
       // slot coordinates
       const coords = (pos)=>{
@@ -446,13 +439,11 @@
       const assignPlayerToPos = (playerId, pos) => {
         setPlayers(prev => prev.map(p=>{
           if (p.id!==playerId) return p;
-          // GK lock: only index 0 intended GK should hold GK; enforce by role
           if (pos==='GK' && p.role!=='GK') return {...p, startingPosition:'Bench'};
           return {...p, startingPosition: pos, preferredPosition: pos};
         }));
       };
 
-      // DnD handlers
       const onDragStart = (id) => (e)=> { e.dataTransfer.setData('text/plain', id); };
       const onDragOver = (e)=> { e.preventDefault(); e.currentTarget.classList.add('dragover'); };
       const onDragLeave = (e)=> { e.currentTarget.classList.remove('dragover'); };
@@ -465,9 +456,27 @@
       };
 
       const positions = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
+
+      // Build a map from current lineup: position -> player (for live view)
+      const currentPosMap = new Map();
+      (displayLineup.players || []).forEach(pl => {
+        if (pl.position && pl.position!=='Bench') currentPosMap.set(pl.position, pl);
+      });
+
       const slotBubbles = positions.map(pos=>{
         const {y,x} = coords(pos);
-        const occupant = displayedPlayers.find(p=>p.startingPosition===pos && p.role!=='GK');
+        // Occupant label depends on mode:
+        // - Assign mode: show from startingPosition (roster)
+        // - Live view: show from current lineup event
+        let occupantName = '';
+        if (isAssignMode) {
+          const rosterOccupant = displayedPlayers.find(p=>p.startingPosition===pos && p.role!=='GK');
+          occupantName = rosterOccupant ? (rosterOccupant.name||'').split(' ')[0] : '';
+        } else {
+          const live = currentPosMap.get(pos);
+          occupantName = live ? (live.name||'').split(' ')[0] : '';
+        }
+
         return (
           <div key={pos}
                className={`absolute drop-slot ${isAssignMode?'cursor-pointer':''}`}
@@ -477,38 +486,41 @@
                onClick={isAssignMode && selectedForTap ? ()=>{ assignPlayerToPos(selectedForTap, pos); setSelectedForTap(null);} : undefined}
                style={{top:`${y}%`, left:`${x}%`, transform:'translate(-50%,-50%)'}}>
             <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-white"
-                 style={{backgroundColor: occupant ? COLORS.SKY_BLUE : 'rgba(255,255,255,.12)', borderColor:COLORS.WHITE}}>
+                 style={{backgroundColor: occupantName ? 'rgba(86,176,213,.9)' : 'rgba(255,255,255,.12)', borderColor:COLORS.WHITE}}>
               {pos}
             </div>
-            {occupant && (
-              <div className="text-[10px] mt-1 text-center font-medium" style={{color:COLORS.WHITE, textShadow:'0 1px 2px rgba(0,0,0,.35)'}}>
-                {(occupant.name||'').split(' ')[0]}
+            {occupantName && (
+              <div className="text-[10px] mt-1 text-center font-medium" style={{color:'#fff', textShadow:'0 1px 2px rgba(0,0,0,.35)'}}>
+                {occupantName}
               </div>
             )}
           </div>
         );
       });
 
-      const gk = displayedPlayers.find(p=>p.role==='GK');
+      const gk = isAssignMode
+        ? displayedPlayers.find(p=>p.role==='GK')
+        : (displayLineup.players || []).find(p=>p.position==='GK');
       const gkC = coords('GK');
 
-      const visualPlayers = playersOnField.map(p=>{
-        const c = coords(p.position);
-        const isGK = p.position==='GK';
-        return (
-          <PlayerCircle key={p.id} name={p.name} position={p.position} isGK={isGK}
-                        color={isGK?COLORS.NAVY_BLUE:COLORS.SKY_BLUE} yPos={c.y} xPos={c.x}
-                        draggable={isAssignMode}
-                        onDragStart={isAssignMode? onDragStart(p.id): undefined}
-                        onClick={isAssignMode? ()=> setSelectedForTap(p.id) : undefined}
-          />
-        );
-      });
+      // Visual Player Bubbles (from current lineup)
+      const visualPlayers = (displayLineup.players || [])
+        .filter(p=>p.position && p.position!=='Bench' && (p.name||'').trim()!=='')
+        .map(p=>{
+          const c = coords(p.position);
+          const isGK = p.position==='GK';
+          return (
+            <PlayerCircle key={p.id} name={p.name} position={p.position} isGK={isGK}
+                          color={isGK?COLORS.NAVY_BLUE:COLORS.SKY_BLUE} yPos={c.y} xPos={c.x}
+                          draggable={isAssignMode}
+                          onDragStart={isAssignMode? onDragStart(p.id): undefined}
+                          onClick={isAssignMode? ()=> setSelectedForTap(p.id) : undefined}
+            />
+          );
+        });
 
-      // in assign mode, make bench players draggable/tappable appearing at bottom?
-      // Simpler: you drag/tap from the roster list (select) then tap a slot; we support tap select via selectedForTap.
+      const showGenerateHint = !isAssignMode && (!lineups || lineups.length <= 1);
 
-      // Premiership gating for timeline views handled by parent (lineups length etc.)
       return (
         <div className="relative w-full h-96 border-4 border-green-800 bg-green-700/80 rounded-xl overflow-hidden shadow-inner">
           {/* pitch lines */}
@@ -518,7 +530,7 @@
             <div className="absolute bottom-0 left-1/2 w-40 h-10 border-white border-2 -translate-x-1/2 -scale-y-100"></div>
           </div>
 
-          {/* GK slot visual */}
+          {/* GK slot */}
           <div className={`absolute ${isAssignMode?'drop-slot':''}`} style={{top:`${gkC.y}%`, left:`${gkC.x}%`, transform:'translate(-50%,-50%)' }}
                onDragOver={isAssignMode? onDragOver: undefined}
                onDragLeave={isAssignMode? onDragLeave: undefined}
@@ -529,11 +541,14 @@
                  style={{backgroundColor: gk ? COLORS.NAVY_BLUE : 'rgba(255,255,255,.12)', borderColor:COLORS.WHITE}}>
               GK
             </div>
-            {gk && <div className="text-[10px] mt-1 text-center font-medium" style={{color:COLORS.WHITE}}>{(gk.name||'').split(' ')[0]}</div>}
+            {gk && <div className="text-[10px] mt-1 text-center font-medium" style={{color:'#fff'}}>{(gk.name||'').split(' ')[0]}</div>}
           </div>
 
           {/* outfield slots */}
           {slotBubbles}
+
+          {/* player bubbles from current lineup */}
+          {visualPlayers}
 
           {/* overlays */}
           <div className="absolute bottom-2 right-2 text-xs font-semibold text-white bg-black/50 px-2 py-1 rounded">
@@ -544,9 +559,11 @@
               <DragI/> Drag a player bubble or <TapI/> tap a player then tap a slot
             </div>
           )}
-
-          {/* render current fielded players when not using starting roster */}
-          {visualPlayers}
+          {showGenerateHint && (
+            <div className="absolute inset-x-0 bottom-3 mx-auto w-fit text-[11px] font-semibold text-white bg-black/50 px-3 py-1 rounded">
+              Generate a plan to activate the live timeline view
+            </div>
+          )}
         </div>
       );
     };
@@ -715,15 +732,10 @@
       };
 
       const validateBeforeGenerate = ()=>{
-        // minutes feasibility
         const res = calculateMinutesWithTargets(settings, displayedPlayers);
         if (res.error) return res.error;
-
-        // GK present
         const gk = displayedPlayers.find(p=>p.role==='GK');
         if (!gk || gk.name.trim()==='') return 'Goalkeeper must be selected (Player 1 defaults to GK).';
-
-        // formation starters
         const slots = getOutfieldSlots(settings.gameFormat, settings.selectedFormation);
         const starters = displayedPlayers.filter(p=>p.startingPosition && p.startingPosition!=='Bench' && p.role!=='GK' && p.name.trim()!=='');
         const posList = starters.map(s=>s.startingPosition);
@@ -749,7 +761,6 @@
             let final = `=== PLAN SUMMARY ===\nFormat: ${settings.gameFormat}\nFormation: ${settings.selectedFormation}\nDuration: ${settings.matchDuration} min\nGK: ${displayedPlayers.find(p=>p.role==='GK')?.name || 'Unassigned'}\n\n`;
             final += planResult.planText;
 
-            // minutes summary
             const summary = (withMinutes||displayedPlayers)
               .filter(p=>p.name.trim()!=='')
               .sort((a,b)=> (a.role==='GK' && b.role!=='GK') ? -1 : (a.role!=='GK' && b.role==='GK') ? 1 : a.name.localeCompare(b.name))
@@ -833,8 +844,12 @@
                   )}
 
                   <label className="block pt-2">Squad Size</label>
+                  <!-- FIXED: accept 8 (no leading zero) -->
                   <input type="number" min={outfieldSpots + (settings.isPermanentGK?1:0)} value={settings.squadSize}
-                         onChange={e=>setSettings(p=>({...p, squadSize: e.target.value===''?0:parseInt(e.target.value,10)}))}
+                         onChange={e=>{
+                           const val = e.target.value;
+                           setSettings(p=>({...p, squadSize: val === '' ? 0 : Number(val)}));
+                         }}
                          className="w-full p-2 rounded-lg text-lg font-semibold" style={{backgroundColor:COLORS.WHITE, color:COLORS.NAVY_BLUE}} />
 
                   <label className="block pt-2">Goalkeeper</label>
@@ -930,21 +945,21 @@
                     </p>
                     <div>
                       <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>Interval (min)</label>
-                      <select value={settings.subInterval} onChange={e=>setSettings(p=>({...p, subInterval:parseInt(e.target.value,10)}))}
+                      <select value={settings.subInterval} onChange={e=>setSettings(p=>({...p, subInterval:Number(e.target.value)}))}
                               className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
                         {[5,8,10,15].map(v=><option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>First Sub (min)</label>
-                      <select value={settings.firstSubTime} onChange={e=>setSettings(p=>({...p, firstSubTime:parseInt(e.target.value,10)}))}
+                      <select value={settings.firstSubTime} onChange={e=>setSettings(p=>({...p, firstSubTime:Number(e.target.value)}))}
                               className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
                         {[5,8,10,15].map(v=><option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium" style={{color:COLORS.NAVY_BLUE}}>Max Subs (#)</label>
-                      <select value={settings.maxSubs} onChange={e=>setSettings(p=>({...p, maxSubs:parseInt(e.target.value,10)}))}
+                      <select value={settings.maxSubs} onChange={e=>setSettings(p=>({...p, maxSubs:Number(e.target.value)}))}
                               className="w-full p-2 rounded-lg text-sm bg-white" disabled={!isPremiership}>
                         {[1,2,3,4].map(v=><option key={v} value={v}>{v}</option>)}
                       </select>
@@ -954,12 +969,15 @@
                       <div className="md:col-span-3 p-3 rounded-lg bg-white border" style={{borderColor:COLORS.SKY_BLUE}}>
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                           <div className="text-sm" style={{color:COLORS.NAVY_BLUE}}>
-                            <strong>Sub Recommendation:</strong> Interval <span className="font-mono">{subRec.subInterval}</span> min,
-                            First Sub <span className="font-mono">{subRec.firstSubTime}</span> min,
-                            Max Subs <span className="font-mono">{subRec.maxSubs}</span>. <em>{subRec.note}</em>
+                            <strong>Sub Recommendation:</strong> Interval <span className="font-mono">{recommendSubs(settings, settings.squadSize).subInterval}</span> min,
+                            First Sub <span className="font-mono">{recommendSubs(settings, settings.squadSize).firstSubTime}</span> min,
+                            Max Subs <span className="font-mono">{recommendSubs(settings, settings.squadSize).maxSubs}</span>. <em>{recommendSubs(settings, settings.squadSize).note}</em>
                           </div>
                           <Button className="mt-3 md:mt-0" color={COLORS.NAVY_BLUE}
-                            onClick={()=>setSettings(p=>({...p, subInterval:subRec.subInterval, firstSubTime:subRec.firstSubTime, maxSubs:subRec.maxSubs}))}>
+                            onClick={()=>{
+                              const sr = recommendSubs(settings, settings.squadSize);
+                              setSettings(p=>({...p, subInterval:sr.subInterval, firstSubTime:sr.firstSubTime, maxSubs:sr.maxSubs}));
+                            }}>
                             Apply Suggestion
                           </Button>
                         </div>
@@ -1009,7 +1027,6 @@
                 <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed" style={{color:COLORS.NAVY_BLUE}}>
 {matchPlan || 'Press "Generate Match Plan" to see the schedule here.'}
                 </pre>
-                {/* compliance */}
                 {matchPlan && (
                   <ComplianceTable players={JSON.parse(localStorage.getItem('tggp_players')||'[]').slice(0, settings.squadSize)} />
                 )}
@@ -1020,7 +1037,6 @@
                   <h3 className="text-xl font-bold" style={{color:COLORS.NAVY_BLUE}}>Live Formation Visual</h3>
                 </div>
 
-                {/* Timeline only if there are multiple events and Premiership */}
                 {subscriptionTier==='Premiership' && matchLineups.length>1 && (
                   <SubstitutionTimeline lineups={matchLineups} currentLineupIndex={currentLineupIndex} setCurrentLineupIndex={setCurrentLineupIndex} />
                 )}
